@@ -51,15 +51,6 @@ export async function createProviderConnection(data: any) {
         "SELECT * FROM provider_connections WHERE provider = ? AND auth_type = 'oauth' AND email = ?"
       )
       .get(data.provider, data.email);
-  } else if (data.authType === "oauth" && !data.email) {
-    // Fallback for providers that don't return email (e.g. Codex, Qwen):
-    // find the most recently updated connection for this provider to update instead of duplicating
-    existing = db
-      .prepare(
-        `SELECT * FROM provider_connections WHERE provider = ? AND auth_type = 'oauth'
-         ORDER BY updated_at DESC LIMIT 1`
-      )
-      .get(data.provider);
   } else if (data.authType === "apikey" && data.name) {
     existing = db
       .prepare(
