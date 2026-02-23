@@ -1,22 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
-import Image from "next/image";
 import { Card, Button, Input, Modal, CardSkeleton } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { AI_PROVIDERS, getProviderByAlias } from "@/shared/constants/providers";
+import Link from "next/link";
 
 const CLOUD_URL = process.env.NEXT_PUBLIC_CLOUD_URL;
 const CLOUD_ACTION_TIMEOUT_MS = 15000;
 
 export default function APIPageClient({ machineId }) {
-  const [keys, setKeys] = useState([]);
   const [providerConnections, setProviderConnections] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
-  const [createdKey, setCreatedKey] = useState(null);
 
   // Endpoints / models state
   const [allModels, setAllModels] = useState([]);
@@ -133,16 +129,9 @@ export default function APIPageClient({ machineId }) {
 
   const fetchData = async () => {
     try {
-      const [keysRes, providersRes] = await Promise.all([
-        fetch("/api/keys"),
-        fetch("/api/providers"),
-      ]);
+      const providersRes = await fetch("/api/providers");
 
-      const [keysData, providersData] = await Promise.all([keysRes.json(), providersRes.json()]);
-
-      if (keysRes.ok) {
-        setKeys(keysData.keys || []);
-      }
+      const providersData = await providersRes.json();
 
       if (providersRes.ok) {
         setProviderConnections(providersData.connections || []);
@@ -283,41 +272,6 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
-  const handleCreateKey = async () => {
-    if (!newKeyName.trim()) return;
-
-    try {
-      const res = await fetch("/api/keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName }),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        setCreatedKey(data.key);
-        await fetchData();
-        setNewKeyName("");
-        setShowAddModal(false);
-      }
-    } catch (error) {
-      console.log("Error creating key:", error);
-    }
-  };
-
-  const handleDeleteKey = async (id) => {
-    if (!confirm("Delete this API key?")) return;
-
-    try {
-      const res = await fetch(`/api/keys/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setKeys(keys.filter((k) => k.id !== id));
-      }
-    } catch (error) {
-      console.log("Error deleting key:", error);
-    }
-  };
-
   const [baseUrl, setBaseUrl] = useState("/v1");
   const cloudEndpointNew = `${CLOUD_URL}/v1`;
 
@@ -442,93 +396,22 @@ export default function APIPageClient({ machineId }) {
           </Button>
         </div>
 
-        {/* Registered Keys — collapsible section inside API Endpoint card */}
-        <div className="border border-border rounded-lg overflow-hidden mt-4">
-          <button
-            onClick={() => setExpandedEndpoint(expandedEndpoint === "keys" ? null : "keys")}
-            className="w-full flex items-center gap-3 p-4 hover:bg-surface/50 transition-colors text-left"
-          >
-            <div className="flex items-center justify-center size-10 rounded-lg bg-amber-500/10 shrink-0">
-              <span className="material-symbols-outlined text-xl text-amber-500">vpn_key</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">Registered Keys</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-surface text-text-muted font-medium">
-                  {keys.length} {keys.length === 1 ? "key" : "keys"}
-                </span>
-              </div>
-              <p className="text-xs text-text-muted mt-0.5">
-                Manage API keys used to authenticate requests to this endpoint
-              </p>
-            </div>
-            <span
-              className={`material-symbols-outlined text-text-muted text-lg transition-transform ${expandedEndpoint === "keys" ? "rotate-180" : ""}`}
-            >
-              expand_more
-            </span>
-          </button>
-
-          {expandedEndpoint === "keys" && (
-            <div className="border-t border-border px-4 pb-4">
-              <div className="flex items-center justify-between mt-3 mb-3">
-                <p className="text-xs text-text-muted">
-                  Each key isolates usage tracking and can be revoked independently.
-                </p>
-                <Button size="sm" icon="add" onClick={() => setShowAddModal(true)}>
-                  Create Key
-                </Button>
-              </div>
-
-              {keys.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
-                    <span className="material-symbols-outlined text-[24px]">vpn_key</span>
-                  </div>
-                  <p className="text-text-main font-medium mb-1 text-sm">No API keys yet</p>
-                  <p className="text-xs text-text-muted mb-3">
-                    Create your first API key to get started
-                  </p>
-                  <Button size="sm" icon="add" onClick={() => setShowAddModal(true)}>
-                    Create Key
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col">
-                  {keys.map((key) => (
-                    <div
-                      key={key.id}
-                      className="group flex items-center justify-between py-3 border-b border-black/[0.03] dark:border-white/[0.03] last:border-b-0"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{key.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <code className="text-xs text-text-muted font-mono">{key.key}</code>
-                          <button
-                            onClick={() => copy(key.key, key.id)}
-                            className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">
-                              {copied === key.id ? "check" : "content_copy"}
-                            </span>
-                          </button>
-                        </div>
-                        <p className="text-xs text-text-muted mt-1">
-                          Created {new Date(key.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteKey(key.id)}
-                        className="p-2 hover:bg-red-500/10 rounded text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Link to API Manager */}
+        <div className="flex items-center gap-3 p-4 border border-border rounded-lg mt-4 bg-surface/30">
+          <div className="flex items-center justify-center size-10 rounded-lg bg-amber-500/10 shrink-0">
+            <span className="material-symbols-outlined text-xl text-amber-500">vpn_key</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">API Key Management</p>
+            <p className="text-xs text-text-muted">
+              Create and manage API keys for authenticating requests
+            </p>
+          </div>
+          <Link href="/dashboard/api-manager">
+            <Button size="sm" variant="secondary" icon="arrow_forward">
+              Manage Keys
+            </Button>
+          </Link>
         </div>
       </Card>
 
@@ -538,8 +421,8 @@ export default function APIPageClient({ machineId }) {
           <div>
             <h2 className="text-lg font-semibold">Available Endpoints</h2>
             <p className="text-sm text-text-muted">
-              {Object.values(endpointData).reduce((acc, models) => acc + models.length, 0)}{" "}
-              models across{" "}
+              {Object.values(endpointData).reduce((acc, models) => acc + models.length, 0)} models
+              across{" "}
               {
                 [
                   endpointData.chat,
@@ -837,67 +720,6 @@ export default function APIPageClient({ machineId }) {
         </div>
       </Modal>
 
-      {/* Add Key Modal */}
-      <Modal
-        isOpen={showAddModal}
-        title="Create API Key"
-        onClose={() => {
-          setShowAddModal(false);
-          setNewKeyName("");
-        }}
-      >
-        <div className="flex flex-col gap-4">
-          <Input
-            label="Key Name"
-            value={newKeyName}
-            onChange={(e) => setNewKeyName(e.target.value)}
-            placeholder="Production Key"
-          />
-          <div className="flex gap-2">
-            <Button onClick={handleCreateKey} fullWidth disabled={!newKeyName.trim()}>
-              Create
-            </Button>
-            <Button
-              onClick={() => {
-                setShowAddModal(false);
-                setNewKeyName("");
-              }}
-              variant="ghost"
-              fullWidth
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Created Key Modal */}
-      <Modal isOpen={!!createdKey} title="API Key Created" onClose={() => setCreatedKey(null)}>
-        <div className="flex flex-col gap-4">
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-            <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2 font-medium">
-              Save this key now!
-            </p>
-            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-              This is the only time you will see this key. Store it securely.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Input value={createdKey || ""} readOnly className="flex-1 font-mono text-sm" />
-            <Button
-              variant="secondary"
-              icon={copied === "created_key" ? "check" : "content_copy"}
-              onClick={() => copy(createdKey, "created_key")}
-            >
-              {copied === "created_key" ? "Copied!" : "Copy"}
-            </Button>
-          </div>
-          <Button onClick={() => setCreatedKey(null)} fullWidth>
-            Done
-          </Button>
-        </div>
-      </Modal>
-
       {/* Disable Cloud Modal */}
       <Modal
         isOpen={showDisableModal}
@@ -981,76 +803,6 @@ export default function APIPageClient({ machineId }) {
 
 APIPageClient.propTypes = {
   machineId: PropTypes.string.isRequired,
-};
-
-function ProviderOverviewCard({ item, onClick }) {
-  const [imgError, setImgError] = useState(false);
-
-  const statusVariant =
-    item.errors > 0 ? "text-red-500" : item.connected > 0 ? "text-green-500" : "text-text-muted";
-
-  return (
-    <div
-      className="border border-border rounded-lg p-3 hover:bg-surface/40 transition-colors cursor-pointer"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onClick?.()}
-    >
-      <div className="flex items-center gap-2.5">
-        <div
-          className="size-8 rounded-lg flex items-center justify-center"
-          style={{ backgroundColor: `${item.provider.color || "#888"}15` }}
-        >
-          {imgError ? (
-            <span
-              className="text-[10px] font-bold"
-              style={{ color: item.provider.color || "#888" }}
-            >
-              {item.provider.textIcon || item.provider.id.slice(0, 2).toUpperCase()}
-            </span>
-          ) : (
-            <Image
-              src={`/providers/${item.provider.id}.png`}
-              alt={item.provider.name}
-              width={26}
-              height={26}
-              className="object-contain rounded-lg"
-              sizes="26px"
-              onError={() => setImgError(true)}
-            />
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold truncate">{item.provider.name}</p>
-          <p className={`text-xs ${statusVariant}`}>
-            {item.total === 0
-              ? "Not configured"
-              : `${item.connected} active · ${item.errors} error`}
-          </p>
-        </div>
-
-        <span className="text-xs text-text-muted">#{item.total}</span>
-      </div>
-    </div>
-  );
-}
-
-ProviderOverviewCard.propTypes = {
-  item: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    provider: PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      name: PropTypes.string.isRequired,
-      color: PropTypes.string,
-      textIcon: PropTypes.string,
-    }).isRequired,
-    total: PropTypes.number.isRequired,
-    connected: PropTypes.number.isRequired,
-    errors: PropTypes.number.isRequired,
-  }).isRequired,
-  onClick: PropTypes.func,
 };
 
 // -- Sub-component: Provider Models Modal ------------------------------------------

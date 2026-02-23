@@ -14,6 +14,7 @@ import CloudSyncStatus from "./CloudSyncStatus";
 const navItems = [
   { href: "/dashboard", label: "Home", icon: "home", exact: true },
   { href: "/dashboard/endpoint", label: "Endpoint", icon: "api" },
+  { href: "/dashboard/api-manager", label: "API Manager", icon: "vpn_key" },
   { href: "/dashboard/providers", label: "Providers", icon: "dns" },
   { href: "/dashboard/combos", label: "Combos", icon: "layers" },
   { href: "/dashboard/logs", label: "Logs", icon: "description" },
