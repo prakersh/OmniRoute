@@ -145,6 +145,15 @@ export const APIKEY_PROVIDERS = {
     textIcon: "GQ",
     website: "https://groq.com",
   },
+  blackbox: {
+    id: "blackbox",
+    alias: "bb",
+    name: "Blackbox AI",
+    icon: "view_in_ar",
+    color: "#1A1A2E",
+    textIcon: "BB",
+    website: "https://blackbox.ai",
+  },
   xai: {
     id: "xai",
     alias: "xai",

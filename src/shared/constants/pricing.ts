@@ -528,6 +528,16 @@ export const DEFAULT_PRICING = {
     "qwen/qwen3-32b": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
   },
 
+  // Blackbox AI
+  blackbox: {
+    "gpt-4o": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+    "gemini-2.5-flash": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+    "claude-sonnet-4": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+    "deepseek-v3": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+    blackboxai: { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+    "blackboxai-pro": { input: 0, output: 0, cached: 0, reasoning: 0, cache_creation: 0 },
+  },
+
   // Fireworks
   fireworks: {
     "accounts/fireworks/models/gpt-oss-120b": {
