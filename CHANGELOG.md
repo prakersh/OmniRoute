@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.7] — 2026-03-02
+
+### 🐛 Bug Fixes
+
+- **Gemini Tool Schema Sanitization** — The standard Gemini provider now sanitizes OpenAI tool schemas before forwarding to Gemini API, removing unsupported JSON Schema keywords (`additionalProperties`, `$schema`, `const`, `default`, `not`, etc.). Previously, sanitization only ran in the CLI executor path, causing Gemini to reject tool calls when schemas contained unsupported constraints. Also applied sanitization to `response_format.json_schema`. Fixes #173
+
 ## [1.7.6] — 2026-03-02
 
 ### 🐛 Bug Fixes
