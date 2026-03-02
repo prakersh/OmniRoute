@@ -6,7 +6,7 @@ description: Fetch all open GitHub issues, analyze bugs, resolve what's possible
 
 ## Overview
 
-This workflow fetches all open issues from the project's GitHub repository, classifies them, analyzes bugs, resolves what can be fixed, and triages issues with insufficient information. **It does NOT commit or release automatically** — it presents a report and waits for user validation before proceeding.
+This workflow fetches all open issues from the project's GitHub repository, classifies them, analyzes bugs, resolves what can be fixed, and triages issues with insufficient information. **It does NOT merge or release automatically** — it creates a PR and waits for user validation before merging.
 
 ## Steps
 
@@ -60,11 +60,12 @@ Call the `/issue-triage` workflow (located at `~/.gemini/antigravity/global_work
 
 Proceed with resolution:
 
-1. **Research** — Search the codebase for files related to the issue
-2. **Root Cause** — Identify the root cause by reading the relevant source files
-3. **Implement Fix** — Apply the fix following existing code patterns and conventions
-4. **Test** — Build the project and run tests to verify the fix
-5. **DO NOT commit yet** — Leave changes staged but uncommitted
+1. **Create a fix branch** — `git checkout -b fix/issue-<NUMBER>-<short-description>`
+2. **Research** — Search the codebase for files related to the issue
+3. **Root Cause** — Identify the root cause by reading the relevant source files
+4. **Implement Fix** — Apply the fix following existing code patterns and conventions
+5. **Test** — Build the project and run tests to verify the fix
+6. **Commit** — Commit with message format: `fix: <description> (#<issue_number>)`
 
 ### 5. Generate Report & Wait for Validation
 
@@ -83,25 +84,37 @@ Present a summary report to the user via `notify_user` with `BlockedOnUser: true
 - If the user requests changes → Apply the requested adjustments first, then present the report again
 - If the user rejects → Revert the changes and stop
 
-### 6. Commit All Fixes (only after user approval)
+### 6. Commit & Push Fix Branch (only after user approval)
 
 After the user validates:
 
 - Commit each fix individually with message format: `fix: <description> (#<issue_number>)`
-- Each fix should be its own commit for clean git history
+- Push the fix branch: `git push origin fix/issue-<NUMBER>-<short-description>`
+- Create a PR: `gh pr create --title "fix: <description> (#<issue_number>)" --body "<details>" --base main`
 
-### 7. Close Resolved Issues
+### 7. 🛑 WAIT — Notify User & Await PR Verification
 
-For each successfully fixed issue:
-// turbo
+**This is a mandatory stop point.** Use `notify_user` with `BlockedOnUser: true`:
 
-- Close with a comment: `gh issue close <NUMBER> --repo <owner>/<repo> --comment "Fixed in <commit_hash>. The fix will be included in the next release."`
+- Inform the user that the PR was created and is **awaiting their verification**
+- Include the PR number, URL, and a summary of what was changed
+- **DO NOT merge, close issues, generate releases, or deploy until the user confirms**
 
-### 8. Update Docs & Release
+Wait for the user to respond:
 
-If any fixes were committed:
+- **User confirms** → Proceed to step 8
+- **User requests changes** → Apply changes, push to the same branch, notify again
+- **User rejects** → Close the PR and stop
 
-1. Run the `/update-docs` workflow (at `~/.gemini/antigravity/global_workflows/update-docs.md`) to update CHANGELOG and README
-2. Run the `/generate-release` workflow (at `.agents/workflows/generate-release.md`) to bump version, tag, and publish
+### 8. Merge, Close Issues & Release (only after user confirms PR)
+
+After the user confirms the PR:
+
+1. **Merge** the PR: `gh pr merge <NUMBER> --merge --repo <owner>/<repo>` or via local merge
+2. **Close** resolved issues with a comment: `gh issue close <NUMBER> --repo <owner>/<repo> --comment "Fixed in <commit_hash>. The fix will be included in the next release."`
+3. **Switch to main**: `git checkout main && git pull`
+4. Run the `/update-docs` workflow (at `~/.gemini/antigravity/global_workflows/update-docs.md`) to update CHANGELOG and README
+5. Run the `/generate-release` workflow (at `.agents/workflows/generate-release.md`) to bump version, tag, and publish
+6. Deploy to local VPS: `ssh root@192.168.0.15 "npm install -g omniroute@<VERSION> && pm2 restart omniroute"`
 
 If NO fixes were committed, skip this step and just present the report.

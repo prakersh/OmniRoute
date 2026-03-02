@@ -6,7 +6,7 @@ description: Analyze open Pull Requests from the project's GitHub repository, ge
 
 ## Overview
 
-This workflow fetches all open PRs from the project's GitHub repository, performs a critical analysis of each one, generates a detailed report, and waits for user approval before proceeding with implementation.
+This workflow fetches all open PRs from the project's GitHub repository, performs a critical analysis of each one, generates a detailed report, and waits for user approval before proceeding with implementation. **All improvements are committed on top of the PR branch** and the user must verify before merge.
 
 ## Steps
 
@@ -94,28 +94,52 @@ Perform a **global impact assessment** to verify whether the PR changes are comp
 
 ### 6. Implementation (if approved)
 
-- Checkout the PR branch or apply changes locally
+- Checkout the PR branch: `gh pr checkout <NUMBER>`
 - Implement any required fixes identified in the analysis
-- If the Cross-Layer Analysis (3f) identified missing frontend/backend counterparts, implement them in this step
+- If the Cross-Layer Analysis (3f) identified missing frontend/backend counterparts, implement them
+- **Commit improvements on top of the PR branch** with descriptive commit messages
 - Run the project's test suite to verify nothing breaks
   // turbo
 - Run: `npm test` or equivalent test command
 - Build the project to verify compilation
   // turbo
 - Run: `npm run build` or equivalent build command
-- If all checks pass, prepare the merge
+- Push the updated branch: `git push origin <branch-name>`
 
-### 7. Thank the Contributor
+### 7. 🛑 WAIT — Notify User & Await PR Verification
 
-- After the PR is approved (and before or after merging), post a **thank-you comment** on the PR via the GitHub UI or API
+**This is a mandatory stop point.** Use `notify_user` with `BlockedOnUser: true`:
+
+- Inform the user that the PR has been **improved and pushed**, and is **awaiting their verification**
+- Include:
+  - PR number and URL
+  - Summary of improvements/fixes applied
+  - Build/test status
+  - List of files changed
+- **DO NOT merge, generate releases, or deploy until the user confirms**
+
+Wait for the user to respond:
+
+- **User confirms** → Proceed to step 8
+- **User requests more changes** → Apply changes, push to the same branch, notify again
+- **User rejects** → Leave a review comment and stop
+
+### 8. Thank the Contributor
+
+- Post a **thank-you comment** on the PR via the GitHub API
 - The message should:
   - Thank the author by name/username for their contribution
-  - Briefly mention what the PR accomplishes
+  - Briefly mention what the PR accomplishes and any improvements applied
   - Be friendly, professional, and encouraging
 - Example: _"Thanks @author for this great contribution! 🎉 The [feature/fix] is now merged and will be part of the next release. We appreciate your effort!"_
 
-### 8. Post-Merge (if applicable)
+### 9. Merge & Release (only after user confirms PR)
 
-- Update CHANGELOG.md with the new feature
-- Consider version bump if warranted
-- Follow the `/generate-release` workflow if a release is needed
+After the user confirms the PR:
+
+1. **Merge** the PR into main (local merge with `--no-ff` or via `gh pr merge`)
+2. **Push** to main: `git push origin main`
+3. **Clean up** the feature branch: `git branch -d <branch-name>`
+4. **Update CHANGELOG.md** with the new feature/fix
+5. Run the `/generate-release` workflow (at `.agents/workflows/generate-release.md`) to bump version, tag, and publish
+6. Deploy to local VPS: `ssh root@192.168.0.15 "npm install -g omniroute@<VERSION> && pm2 restart omniroute"`
