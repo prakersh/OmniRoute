@@ -136,51 +136,71 @@ export function createSSEStream(options: any = {}) {
               try {
                 let parsed = JSON.parse(trimmed.slice(5).trim());
 
-                // Sanitize: strip non-standard fields for OpenAI SDK compatibility
-                parsed = sanitizeStreamingChunk(parsed);
+                // Detect Responses SSE payloads (have a `type` field like "response.created",
+                // "response.output_item.added", etc.) and skip Chat Completions-specific
+                // sanitization to avoid corrupting the stream for Responses-native clients.
+                const isResponsesSSE =
+                  parsed.type &&
+                  typeof parsed.type === "string" &&
+                  parsed.type.startsWith("response.");
 
-                const idFixed = fixInvalidId(parsed);
-
-                if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
-                  continue;
-                }
-
-                const delta = parsed.choices?.[0]?.delta;
-
-                // Extract <think> tags from streaming content
-                if (delta?.content && typeof delta.content === "string") {
-                  const { content, thinking } = extractThinkingFromContent(delta.content);
-                  delta.content = content;
-                  if (thinking && !delta.reasoning_content) {
-                    delta.reasoning_content = thinking;
+                if (isResponsesSSE) {
+                  // Responses SSE: only extract usage, forward payload as-is
+                  const extracted = extractUsage(parsed);
+                  if (extracted) {
+                    usage = extracted;
                   }
-                }
+                  // Track content length from Responses format
+                  if (parsed.delta && typeof parsed.delta === "string") {
+                    totalContentLength += parsed.delta.length;
+                  }
+                } else {
+                  // Chat Completions: full sanitization pipeline
+                  parsed = sanitizeStreamingChunk(parsed);
 
-                const content = delta?.content || delta?.reasoning_content;
-                if (content && typeof content === "string") {
-                  totalContentLength += content.length;
-                }
+                  const idFixed = fixInvalidId(parsed);
 
-                const extracted = extractUsage(parsed);
-                if (extracted) {
-                  usage = extracted;
-                }
+                  if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
+                    continue;
+                  }
 
-                const isFinishChunk = parsed.choices?.[0]?.finish_reason;
-                if (isFinishChunk && !hasValidUsage(parsed.usage)) {
-                  const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
-                  parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
-                  output = `data: ${JSON.stringify(parsed)}\n`;
-                  usage = estimated;
-                  injectedUsage = true;
-                } else if (isFinishChunk && usage) {
-                  const buffered = addBufferToUsage(usage);
-                  parsed.usage = filterUsageForFormat(buffered, FORMATS.OPENAI);
-                  output = `data: ${JSON.stringify(parsed)}\n`;
-                  injectedUsage = true;
-                } else if (idFixed) {
-                  output = `data: ${JSON.stringify(parsed)}\n`;
-                  injectedUsage = true;
+                  const delta = parsed.choices?.[0]?.delta;
+
+                  // Extract <think> tags from streaming content
+                  if (delta?.content && typeof delta.content === "string") {
+                    const { content, thinking } = extractThinkingFromContent(delta.content);
+                    delta.content = content;
+                    if (thinking && !delta.reasoning_content) {
+                      delta.reasoning_content = thinking;
+                    }
+                  }
+
+                  const content = delta?.content || delta?.reasoning_content;
+                  if (content && typeof content === "string") {
+                    totalContentLength += content.length;
+                  }
+
+                  const extracted = extractUsage(parsed);
+                  if (extracted) {
+                    usage = extracted;
+                  }
+
+                  const isFinishChunk = parsed.choices?.[0]?.finish_reason;
+                  if (isFinishChunk && !hasValidUsage(parsed.usage)) {
+                    const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+                    parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
+                    output = `data: ${JSON.stringify(parsed)}\n`;
+                    usage = estimated;
+                    injectedUsage = true;
+                  } else if (isFinishChunk && usage) {
+                    const buffered = addBufferToUsage(usage);
+                    parsed.usage = filterUsageForFormat(buffered, FORMATS.OPENAI);
+                    output = `data: ${JSON.stringify(parsed)}\n`;
+                    injectedUsage = true;
+                  } else if (idFixed) {
+                    output = `data: ${JSON.stringify(parsed)}\n`;
+                    injectedUsage = true;
+                  }
                 }
               } catch {}
             }
