@@ -10,6 +10,9 @@ import fs from "node:fs";
 import { resolveDataDir, getLegacyDotDataDir } from "../dataPaths";
 import { runMigrations } from "./migrationRunner";
 
+type SqliteDatabase = import("better-sqlite3").Database;
+type JsonRecord = Record<string, unknown>;
+
 // ──────────────── Environment Detection ────────────────
 
 export const isCloud = typeof globalThis.caches === "object" && globalThis.caches !== null;
@@ -114,6 +117,8 @@ const SCHEMA_SQL = `
     name TEXT NOT NULL,
     key TEXT NOT NULL UNIQUE,
     machine_id TEXT,
+    allowed_models TEXT DEFAULT '[]',
+    no_log INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_ak_key ON api_keys(key);
@@ -243,27 +248,27 @@ const SCHEMA_SQL = `
 
 // ──────────────── Column Mapping ────────────────
 
-export function toSnakeCase(str) {
+export function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, "_$1").toLowerCase();
 }
 
-export function toCamelCase(str) {
-  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+export function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
 }
 
-export function objToSnake(obj) {
+export function objToSnake(obj: unknown): unknown {
   if (!obj || typeof obj !== "object") return obj;
-  const result = {};
-  for (const [k, v] of Object.entries(obj)) {
+  const result: JsonRecord = {};
+  for (const [k, v] of Object.entries(obj as JsonRecord)) {
     result[toSnakeCase(k)] = v;
   }
   return result;
 }
 
-export function rowToCamel(row) {
+export function rowToCamel(row: unknown): JsonRecord | null {
   if (!row) return null;
-  const result = {};
-  for (const [k, v] of Object.entries(row)) {
+  const result: JsonRecord = {};
+  for (const [k, v] of Object.entries(row as JsonRecord)) {
     const camelKey = toCamelCase(k);
     if (camelKey === "isActive" || camelKey === "rateLimitProtection") {
       result[camelKey] = v === 1 || v === true;
@@ -280,9 +285,9 @@ export function rowToCamel(row) {
   return result;
 }
 
-export function cleanNulls(obj) {
-  const result = {};
-  for (const [k, v] of Object.entries(obj)) {
+export function cleanNulls(obj: unknown): JsonRecord {
+  const result: JsonRecord = {};
+  for (const [k, v] of Object.entries((obj as JsonRecord) || {})) {
     if (v !== null && v !== undefined) {
       result[k] = v;
     }
@@ -292,40 +297,50 @@ export function cleanNulls(obj) {
 
 // ──────────────── Singleton DB Instance ────────────────
 
-let _db = null;
+let _db: SqliteDatabase | null = null;
 
-function ensureProviderConnectionsColumns(db) {
+function ensureProviderConnectionsColumns(db: SqliteDatabase) {
   try {
-    const columns = db.prepare("PRAGMA table_info(provider_connections)").all();
-    const columnNames = new Set(columns.map((column) => column.name));
+    const columns = db.prepare("PRAGMA table_info(provider_connections)").all() as Array<{
+      name?: string;
+    }>;
+    const columnNames = new Set(columns.map((column) => String(column.name ?? "")));
     if (!columnNames.has("rate_limit_protection")) {
       db.exec(
         "ALTER TABLE provider_connections ADD COLUMN rate_limit_protection INTEGER DEFAULT 0"
       );
       console.log("[DB] Added provider_connections.rate_limit_protection column");
     }
-  } catch (error) {
-    console.warn("[DB] Failed to verify provider_connections schema:", error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[DB] Failed to verify provider_connections schema:", message);
   }
 }
 
-export function getDbInstance() {
+export function getDbInstance(): SqliteDatabase {
   if (_db) return _db;
 
   if (isCloud || isBuildPhase) {
     if (isBuildPhase) {
       console.log("[DB] Build phase detected — using in-memory SQLite (read-only)");
     }
-    _db = new Database(":memory:");
-    _db.pragma("journal_mode = WAL");
-    _db.exec(SCHEMA_SQL);
-    return _db;
+    const memoryDb = new Database(":memory:");
+    memoryDb.pragma("journal_mode = WAL");
+    memoryDb.exec(SCHEMA_SQL);
+    _db = memoryDb;
+    return memoryDb;
   }
 
+  const sqliteFile = SQLITE_FILE;
+  if (!sqliteFile) {
+    throw new Error("SQLITE_FILE is unavailable for local mode");
+  }
+  const jsonDbFile = JSON_DB_FILE;
+
   // Detect and handle old schema format — preserve data when possible (#146)
-  if (fs.existsSync(SQLITE_FILE)) {
+  if (fs.existsSync(sqliteFile)) {
     try {
-      const probe = new Database(SQLITE_FILE, { readonly: true });
+      const probe = new Database(sqliteFile, { readonly: true });
       const hasOldSchema = probe
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
         .get();
@@ -337,7 +352,7 @@ export function getDbInstance() {
           const count = probe.prepare("SELECT COUNT(*) as c FROM provider_connections").get() as
             | { c: number }
             | undefined;
-          hasData = count && count.c > 0;
+          hasData = Boolean(count && count.c > 0);
         } catch {
           // Table might not exist at all — truly incompatible
         }
@@ -349,26 +364,27 @@ export function getDbInstance() {
           console.log(
             `[DB] Old schema_migrations table found but data exists — preserving data (#146)`
           );
-          const fixDb = new Database(SQLITE_FILE);
+          const fixDb = new Database(sqliteFile);
           try {
             fixDb.exec("DROP TABLE IF EXISTS schema_migrations");
             // Clean up WAL/SHM files that might be stale
             fixDb.pragma("wal_checkpoint(TRUNCATE)");
-          } catch (e) {
-            console.warn("[DB] Could not clean up old schema table:", e.message);
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.warn("[DB] Could not clean up old schema table:", message);
           } finally {
             fixDb.close();
           }
         } else {
           // No data — safe to rename and start fresh
-          const oldPath = SQLITE_FILE + ".old-schema";
+          const oldPath = sqliteFile + ".old-schema";
           console.log(
             `[DB] Old incompatible schema detected (empty) — renaming to ${path.basename(oldPath)}`
           );
-          fs.renameSync(SQLITE_FILE, oldPath);
+          fs.renameSync(sqliteFile, oldPath);
           for (const ext of ["-wal", "-shm"]) {
             try {
-              if (fs.existsSync(SQLITE_FILE + ext)) fs.unlinkSync(SQLITE_FILE + ext);
+              if (fs.existsSync(sqliteFile + ext)) fs.unlinkSync(sqliteFile + ext);
             } catch {
               /* ok */
             }
@@ -377,27 +393,28 @@ export function getDbInstance() {
       } else {
         probe.close();
       }
-    } catch (e) {
-      console.warn("[DB] Could not probe existing DB, will create fresh:", e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn("[DB] Could not probe existing DB, will create fresh:", message);
       try {
-        fs.unlinkSync(SQLITE_FILE);
+        fs.unlinkSync(sqliteFile);
       } catch {
         /* ok */
       }
     }
   }
 
-  _db = new Database(SQLITE_FILE);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("busy_timeout = 5000");
-  _db.pragma("synchronous = NORMAL");
-  _db.exec(SCHEMA_SQL);
-  ensureProviderConnectionsColumns(_db);
+  const db = new Database(sqliteFile);
+  db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
+  db.pragma("synchronous = NORMAL");
+  db.exec(SCHEMA_SQL);
+  ensureProviderConnectionsColumns(db);
 
   // ── Versioned Migrations ──
   // Auto-seed 001 as applied (the inline SCHEMA_SQL already created these tables)
   // then run any new migrations (002+)
-  _db.exec(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS _omniroute_migrations (
       version TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -406,21 +423,22 @@ export function getDbInstance() {
     INSERT OR IGNORE INTO _omniroute_migrations (version, name)
     VALUES ('001', 'initial_schema');
   `);
-  runMigrations(_db);
+  runMigrations(db);
 
   // Auto-migrate from db.json if exists
-  if (JSON_DB_FILE && fs.existsSync(JSON_DB_FILE)) {
-    migrateFromJson(_db, JSON_DB_FILE);
+  if (jsonDbFile && fs.existsSync(jsonDbFile)) {
+    migrateFromJson(db, jsonDbFile);
   }
 
   // Store schema version
-  const versionStmt = _db.prepare(
+  const versionStmt = db.prepare(
     "INSERT OR REPLACE INTO db_meta (key, value) VALUES ('schema_version', '1')"
   );
   versionStmt.run();
 
-  console.log(`[DB] SQLite database ready: ${SQLITE_FILE}`);
-  return _db;
+  _db = db;
+  console.log(`[DB] SQLite database ready: ${sqliteFile}`);
+  return db;
 }
 
 /**
@@ -435,7 +453,7 @@ export function resetDbInstance() {
 
 // ──────────────── JSON → SQLite Migration ────────────────
 
-function migrateFromJson(db, jsonPath) {
+function migrateFromJson(db: SqliteDatabase, jsonPath: string) {
   try {
     const raw = fs.readFileSync(jsonPath, "utf-8");
     const data = JSON.parse(raw);
@@ -584,8 +602,8 @@ function migrateFromJson(db, jsonPath) {
 
       // 5. API Keys
       const insertKey = db.prepare(`
-        INSERT OR REPLACE INTO api_keys (id, name, key, machine_id, created_at)
-        VALUES (@id, @name, @key, @machineId, @createdAt)
+        INSERT OR REPLACE INTO api_keys (id, name, key, machine_id, allowed_models, no_log, created_at)
+        VALUES (@id, @name, @key, @machineId, @allowedModels, @noLog, @createdAt)
       `);
       for (const apiKey of data.apiKeys || []) {
         insertKey.run({
@@ -593,6 +611,8 @@ function migrateFromJson(db, jsonPath) {
           name: apiKey.name,
           key: apiKey.key,
           machineId: apiKey.machineId || null,
+          allowedModels: JSON.stringify(apiKey.allowedModels || []),
+          noLog: apiKey.noLog ? 1 : 0,
           createdAt: apiKey.createdAt || new Date().toISOString(),
         });
       }

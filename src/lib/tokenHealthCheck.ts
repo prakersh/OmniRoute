@@ -21,6 +21,17 @@ import {
 const TICK_MS = 60 * 1000; // sweep interval: every 60 seconds
 const DEFAULT_HEALTH_CHECK_INTERVAL_MIN = 60; // default per-connection interval
 const LOG_PREFIX = "[HealthCheck]";
+const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
+
+function isEnvFlagEnabled(name: string): boolean {
+  const value = process.env[name];
+  if (!value) return false;
+  return TRUE_ENV_VALUES.has(value.trim().toLowerCase());
+}
+
+function isHealthCheckDisabled(): boolean {
+  return isEnvFlagEnabled("OMNIROUTE_DISABLE_TOKEN_HEALTHCHECK") || process.env.NODE_ENV === "test";
+}
 
 // ── Logging helper ───────────────────────────────────────────────────────────
 let cachedHideLogs: boolean | null = null;
@@ -29,6 +40,10 @@ let pendingHideLogs: Promise<boolean> | null = null;
 const CACHE_TTL = 30_000; // Cache settings for 30 seconds
 
 async function shouldHideLogs(): Promise<boolean> {
+  if (isEnvFlagEnabled("OMNIROUTE_HIDE_HEALTHCHECK_LOGS") || process.env.NODE_ENV === "test") {
+    return true;
+  }
+
   const now = Date.now();
 
   // Return cached value if valid
@@ -92,7 +107,7 @@ let intervalHandle = null;
  * Start the health-check scheduler (idempotent).
  */
 export function initTokenHealthCheck() {
-  if (initialized) return;
+  if (initialized || isHealthCheckDisabled()) return;
   initialized = true;
 
   log(`${LOG_PREFIX} Starting proactive token health-check (tick every ${TICK_MS / 1000}s)`);

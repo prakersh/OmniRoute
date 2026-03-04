@@ -14,7 +14,9 @@ import {
   DB_BACKUPS_DIR,
   DATA_DIR,
 } from "./core";
-import { resetApiKeyState } from "./apiKeys";
+import { resetAllDbModuleState } from "./stateReset";
+
+type CountRow = { cnt?: number };
 
 // ──────────────── Backup Config ────────────────
 
@@ -67,8 +69,9 @@ export function backupDbFile(reason = "auto") {
       .then(() => {
         console.log(`[DB] Backup created: ${backupFile} (${stat.size} bytes)`);
       })
-      .catch((err) => {
-        console.error("[DB] Backup failed:", err.message);
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[DB] Backup failed:", message);
       });
 
     // Rotation — keep only last N, delete smallest first
@@ -100,8 +103,9 @@ export function backupDbFile(reason = "auto") {
     }
 
     return { filename: path.basename(backupFile), size: stat.size };
-  } catch (err) {
-    console.error("[DB] Backup failed:", err.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[DB] Backup failed:", message);
     return null;
   }
 }
@@ -128,7 +132,9 @@ export async function listDbBackups() {
       let connectionCount = 0;
       try {
         const backupDb = new Database(filePath, { readonly: true });
-        const row: any = backupDb.prepare("SELECT COUNT(*) as cnt FROM provider_connections").get();
+        const row = backupDb.prepare("SELECT COUNT(*) as cnt FROM provider_connections").get() as
+          | CountRow
+          | undefined;
         connectionCount = row?.cnt || 0;
         backupDb.close();
       } catch {
@@ -151,7 +157,7 @@ export async function listDbBackups() {
 
 // ──────────────── Restore Backup ────────────────
 
-export async function restoreDbBackup(backupId) {
+export async function restoreDbBackup(backupId: string) {
   const backupDir = DB_BACKUPS_DIR || path.join(DATA_DIR, "db_backups");
   const backupPath = path.join(backupDir, backupId);
 
@@ -165,14 +171,15 @@ export async function restoreDbBackup(backupId) {
   // Validate backup integrity
   try {
     const testDb = new Database(backupPath, { readonly: true });
-    const result = testDb.pragma("integrity_check");
+    const result = testDb.pragma("integrity_check") as Array<{ integrity_check?: string }>;
     testDb.close();
     if (result[0]?.integrity_check !== "ok") {
       throw new Error("Backup integrity check failed");
     }
-  } catch (e) {
-    if (e.message === "Backup integrity check failed") throw e;
-    throw new Error(`Backup file is corrupt: ${e.message}`);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === "Backup integrity check failed") throw e;
+    const message = e instanceof Error ? e.message : String(e);
+    throw new Error(`Backup file is corrupt: ${message}`);
   }
 
   // Force pre-restore backup (bypass throttle)
@@ -183,14 +190,19 @@ export async function restoreDbBackup(backupId) {
   resetDbInstance();
 
   // Clear all cached prepared statements and other state bound to the old connection
-  resetApiKeyState();
+  resetAllDbModuleState();
+
+  const sqliteFile = SQLITE_FILE;
+  if (!sqliteFile) {
+    throw new Error("SQLITE_FILE is unavailable in local backup restore");
+  }
 
   // Remove main file and WAL sidecars to avoid stale frame replay after restore.
   const sqliteFilesToReplace = [
-    SQLITE_FILE,
-    `${SQLITE_FILE}-wal`,
-    `${SQLITE_FILE}-shm`,
-    `${SQLITE_FILE}-journal`,
+    sqliteFile,
+    `${sqliteFile}-wal`,
+    `${sqliteFile}-shm`,
+    `${sqliteFile}-journal`,
   ];
   for (const filePath of sqliteFilesToReplace) {
     if (!filePath) continue;
@@ -200,14 +212,20 @@ export async function restoreDbBackup(backupId) {
   }
 
   // Copy backup over current DB
-  fs.copyFileSync(backupPath, SQLITE_FILE);
+  fs.copyFileSync(backupPath, sqliteFile);
 
   // Reopen
   const db = getDbInstance();
-  const connCount = db.prepare("SELECT COUNT(*) as cnt FROM provider_connections").get()?.cnt || 0;
-  const nodeCount = db.prepare("SELECT COUNT(*) as cnt FROM provider_nodes").get()?.cnt || 0;
-  const comboCount = db.prepare("SELECT COUNT(*) as cnt FROM combos").get()?.cnt || 0;
-  const keyCount = db.prepare("SELECT COUNT(*) as cnt FROM api_keys").get()?.cnt || 0;
+  const connCount =
+    (db.prepare("SELECT COUNT(*) as cnt FROM provider_connections").get() as CountRow | undefined)
+      ?.cnt || 0;
+  const nodeCount =
+    (db.prepare("SELECT COUNT(*) as cnt FROM provider_nodes").get() as CountRow | undefined)?.cnt ||
+    0;
+  const comboCount =
+    (db.prepare("SELECT COUNT(*) as cnt FROM combos").get() as CountRow | undefined)?.cnt || 0;
+  const keyCount =
+    (db.prepare("SELECT COUNT(*) as cnt FROM api_keys").get() as CountRow | undefined)?.cnt || 0;
 
   console.log(`[DB] Restored backup: ${backupId} (${connCount} connections)`);
 

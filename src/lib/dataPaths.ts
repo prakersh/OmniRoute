@@ -11,7 +11,7 @@ function safeHomeDir() {
   }
 }
 
-function normalizeConfiguredPath(dir) {
+function normalizeConfiguredPath(dir: unknown): string | null {
   if (typeof dir !== "string") return null;
   const trimmed = dir.trim();
   if (!trimmed) return null;
@@ -39,7 +39,7 @@ export function getDefaultDataDir() {
   return getLegacyDotDataDir();
 }
 
-export function resolveDataDir({ isCloud = false } = {}) {
+export function resolveDataDir({ isCloud = false }: { isCloud?: boolean } = {}): string {
   if (isCloud) return "/tmp";
 
   const configured = normalizeConfiguredPath(process.env.DATA_DIR);
@@ -48,7 +48,7 @@ export function resolveDataDir({ isCloud = false } = {}) {
   return getDefaultDataDir();
 }
 
-export function isSamePath(a, b) {
+export function isSamePath(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
   const normalizedA = path.resolve(a);
   const normalizedB = path.resolve(b);

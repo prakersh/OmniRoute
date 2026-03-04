@@ -9,12 +9,15 @@
  * @module lib/compliance
  */
 
-
 import { getDbInstance } from "../db/core";
 
 /** @returns {import("better-sqlite3").Database | null} */
 function getDb() {
-  try { return getDbInstance(); } catch { return null; }
+  try {
+    return getDbInstance();
+  } catch {
+    return null;
+  }
 }
 
 const LOG_RETENTION_DAYS = parseInt(process.env.LOG_RETENTION_DAYS || "90", 10);
@@ -51,7 +54,13 @@ export function initAuditLog() {
  * @param {Object|string} [entry.details] - Additional details
  * @param {string} [entry.ipAddress] - Client IP
  */
-export function logAuditEvent(entry: { action: string; actor?: string; target?: string; details?: unknown; ipAddress?: string }) {
+export function logAuditEvent(entry: {
+  action: string;
+  actor?: string;
+  target?: string;
+  details?: unknown;
+  ipAddress?: string;
+}) {
   const db = getDb();
   if (!db) return;
 
@@ -82,7 +91,9 @@ export function logAuditEvent(entry: { action: string; actor?: string; target?: 
  * @param {number} [filter.offset=0] - Pagination offset
  * @returns {Array<{ id: number, timestamp: string, action: string, actor: string, target: string, details: any, ip_address: string }>}
  */
-export function getAuditLog(filter: { action?: string; actor?: string; limit?: number; offset?: number } = {}) {
+export function getAuditLog(
+  filter: { action?: string; actor?: string; limit?: number; offset?: number } = {}
+) {
   const db = getDb();
   if (!db) return [];
 
@@ -102,13 +113,12 @@ export function getAuditLog(filter: { action?: string; actor?: string; limit?: n
   const limit = filter.limit || 100;
   const offset = filter.offset || 0;
 
-  /** @type {any[]} */
   const rows = db
     .prepare(`SELECT * FROM audit_log ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`)
-    .all(...params, limit, offset);
+    .all(...params, limit, offset) as Array<Record<string, unknown> & { details?: string | null }>;
 
   return rows.map((row) => ({
-    ...row,
+    ...(row as Record<string, unknown>),
     details: row.details ? JSON.parse(String(row.details)) : null,
   }));
 }
@@ -117,6 +127,17 @@ export function getAuditLog(filter: { action?: string; actor?: string; limit?: n
 
 /** @type {Set<string>} API key IDs with logging disabled */
 const noLogKeys = new Set();
+const noLogDbCache = new Map<string, { value: boolean; timestamp: number }>();
+let noLogColumnVerified = false;
+let hasNoLogColumn = false;
+const NO_LOG_CACHE_TTL_MS = 30_000;
+const noLogIdsFromEnv = (process.env.NO_LOG_API_KEY_IDS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+for (const id of noLogIdsFromEnv) {
+  noLogKeys.add(id);
+}
 
 /**
  * Set whether an API key opts out of request logging.
@@ -130,6 +151,45 @@ export function setNoLog(apiKeyId: string, noLog: boolean) {
   } else {
     noLogKeys.delete(apiKeyId);
   }
+  noLogDbCache.set(apiKeyId, { value: noLog, timestamp: Date.now() });
+}
+
+function ensureNoLogColumn(db: import("better-sqlite3").Database) {
+  if (noLogColumnVerified) {
+    return hasNoLogColumn;
+  }
+
+  try {
+    const columns = db.prepare("PRAGMA table_info(api_keys)").all() as Array<{ name: string }>;
+    hasNoLogColumn = columns.some((column) => column.name === "no_log");
+  } catch {
+    hasNoLogColumn = false;
+  }
+
+  noLogColumnVerified = true;
+  return hasNoLogColumn;
+}
+
+function readNoLogFromDb(apiKeyId: string): boolean {
+  const db = getDb();
+  if (!db || !apiKeyId) return false;
+  if (!ensureNoLogColumn(db)) return false;
+
+  const cached = noLogDbCache.get(apiKeyId);
+  if (cached && Date.now() - cached.timestamp < NO_LOG_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  try {
+    const row = db.prepare("SELECT no_log FROM api_keys WHERE id = ?").get(apiKeyId) as
+      | { no_log?: number }
+      | undefined;
+    const value = Boolean(row && Number(row.no_log) === 1);
+    noLogDbCache.set(apiKeyId, { value, timestamp: Date.now() });
+    return value;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -139,7 +199,14 @@ export function setNoLog(apiKeyId: string, noLog: boolean) {
  * @returns {boolean}
  */
 export function isNoLog(apiKeyId: string) {
-  return noLogKeys.has(apiKeyId);
+  if (!apiKeyId) return false;
+  if (noLogKeys.has(apiKeyId)) return true;
+
+  const persistedNoLog = readNoLogFromDb(apiKeyId);
+  if (persistedNoLog) {
+    noLogKeys.add(apiKeyId);
+  }
+  return persistedNoLog;
 }
 
 // ─── Log Retention / Cleanup ────────────────

@@ -15,17 +15,17 @@
  * @module lib/container
  */
 
-import { evaluateFirstAllowed, evaluateRequest, PolicyEngine } from "../domain/policyEngine";
-import { getDbInstance } from "./db/core";
+import { evaluateFirstAllowed, evaluateRequest, PolicyEngine } from "../domain/policyEngine.ts";
+import { getDbInstance } from "./db/core.ts";
 import {
   decrypt,
   decryptConnectionFields,
   encrypt,
   encryptConnectionFields,
-} from "./db/encryption";
-import { getSettings } from "./localDb";
-import { getCircuitBreaker } from "../shared/utils/circuitBreaker";
-import { recordTelemetry, RequestTelemetry } from "../shared/utils/requestTelemetry";
+} from "./db/encryption.ts";
+import { getSettings } from "./localDb.ts";
+import { getCircuitBreaker } from "../shared/utils/circuitBreaker.ts";
+import { recordTelemetry, RequestTelemetry } from "../shared/utils/requestTelemetry.ts";
 
 type Factory<T = any> = () => T;
 
