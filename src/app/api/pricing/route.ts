@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPricing, updatePricing, resetPricing, resetAllPricing } from "@/lib/localDb";
-import {
-  isValidationFailure,
-  updatePricingSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updatePricingSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/pricing

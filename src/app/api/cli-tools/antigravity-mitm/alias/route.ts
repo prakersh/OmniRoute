@@ -2,11 +2,8 @@
 
 import { NextResponse } from "next/server";
 import { getMitmAlias, setMitmAliasAll } from "@/models";
-import {
-  cliMitmAliasUpdateSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliMitmAliasUpdateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET - Get MITM aliases for a tool
 export async function GET(request) {

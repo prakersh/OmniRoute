@@ -8,12 +8,8 @@ import {
   getCachedPassword,
   setCachedPassword,
 } from "@/mitm/manager";
-import {
-  cliMitmStartSchema,
-  cliMitmStopSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliMitmStartSchema, cliMitmStopSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET - Check MITM status
 export async function GET() {

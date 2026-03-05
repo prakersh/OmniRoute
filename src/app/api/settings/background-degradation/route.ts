@@ -5,12 +5,8 @@ import {
   resetStats,
 } from "@omniroute/open-sse/services/backgroundTaskDetector.ts";
 import { updateSettings } from "@/lib/db/settings";
-import {
-  isValidationFailure,
-  jsonObjectSchema,
-  resetStatsActionSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { jsonObjectSchema, resetStatsActionSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/settings/background-degradation

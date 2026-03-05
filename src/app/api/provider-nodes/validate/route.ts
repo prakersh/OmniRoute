@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  isValidationFailure,
-  providerNodeValidateSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { providerNodeValidateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // POST /api/provider-nodes/validate - Validate API key against base URL
 export async function POST(request) {

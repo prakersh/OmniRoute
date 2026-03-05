@@ -3,7 +3,8 @@ import { CursorService } from "@/lib/oauth/services/cursor";
 import { createProviderConnection, isCloudEnabled } from "@/models";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import { cursorImportSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { cursorImportSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * POST /api/oauth/cursor/import

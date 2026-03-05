@@ -10,11 +10,8 @@ import {
 } from "@/shared/services/cliRuntime";
 import { createBackup } from "@/shared/services/backupService";
 import { saveCliToolLastConfigured, deleteCliToolLastConfigured } from "@/lib/db/cliToolState";
-import {
-  cliModelConfigSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliModelConfigSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const getOpenClawSettingsPath = () => getCliPrimaryConfigPath("openclaw");
 const getOpenClawDir = () => path.dirname(getOpenClawSettingsPath());

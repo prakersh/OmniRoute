@@ -3,11 +3,8 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { getRuntimePorts } from "@/lib/runtime/ports";
-import {
-  guideSettingsSaveSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { guideSettingsSaveSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * POST /api/cli-tools/guide-settings/:toolId

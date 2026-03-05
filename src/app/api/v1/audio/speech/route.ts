@@ -5,11 +5,8 @@ import { parseSpeechModel, getSpeechProvider } from "@omniroute/open-sse/config/
 import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
 import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
 import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
-import {
-  isValidationFailure,
-  v1AudioSpeechSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { v1AudioSpeechSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

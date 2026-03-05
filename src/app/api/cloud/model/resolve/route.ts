@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateApiKey, getModelAliases } from "@/models";
-import { cloudResolveAliasSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { cloudResolveAliasSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // Resolve model alias to provider/model
 export async function POST(request: Request) {

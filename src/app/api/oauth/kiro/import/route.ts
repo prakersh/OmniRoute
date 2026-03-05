@@ -3,7 +3,8 @@ import { KiroService } from "@/lib/oauth/services/kiro";
 import { createProviderConnection, isCloudEnabled } from "@/models";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import { isValidationFailure, kiroImportSchema, validateBody } from "@/shared/validation/schemas";
+import { kiroImportSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * POST /api/oauth/kiro/import

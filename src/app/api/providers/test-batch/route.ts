@@ -8,11 +8,8 @@ import {
   ANTHROPIC_COMPATIBLE_PREFIX,
 } from "@/shared/constants/providers";
 import { testSingleConnection } from "../[id]/test/route";
-import {
-  isValidationFailure,
-  providersBatchTestSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { providersBatchTestSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // Determine auth type group for a provider id
 function getAuthGroup(providerId) {

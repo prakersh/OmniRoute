@@ -11,11 +11,8 @@ import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
 import * as log from "@/sse/utils/logger";
 import { toJsonErrorPayload } from "@/shared/utils/upstreamError";
 import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
-import {
-  isValidationFailure,
-  v1ImageGenerationSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { v1ImageGenerationSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

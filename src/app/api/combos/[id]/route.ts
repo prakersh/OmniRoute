@@ -10,7 +10,8 @@ import {
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
 import { validateComboDAG } from "@omniroute/open-sse/services/combo.ts";
-import { isValidationFailure, updateComboSchema, validateBody } from "@/shared/validation/schemas";
+import { updateComboSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/combos/[id] - Get combo by ID
 export async function GET(request, { params }) {

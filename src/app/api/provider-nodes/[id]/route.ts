@@ -7,11 +7,8 @@ import {
   updateProviderConnection,
   updateProviderNode,
 } from "@/models";
-import {
-  isValidationFailure,
-  updateProviderNodeSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateProviderNodeSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 type JsonRecord = Record<string, unknown>;
 

@@ -9,11 +9,8 @@ import {
   tempBanIP,
   removeTempBan,
 } from "@omniroute/open-sse/services/ipFilter.ts";
-import {
-  isValidationFailure,
-  updateIpFilterSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateIpFilterSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

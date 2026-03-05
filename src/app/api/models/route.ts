@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { getModelAliases, setModelAlias, getProviderConnections } from "@/models";
 import { AI_MODELS } from "@/shared/constants/config";
-import {
-  isValidationFailure,
-  updateModelAliasSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateModelAliasSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/models - Get models with aliases (only from active providers by default)
 export async function GET(request: Request) {

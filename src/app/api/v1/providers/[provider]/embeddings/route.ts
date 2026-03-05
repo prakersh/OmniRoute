@@ -6,7 +6,8 @@ import { getProviderCredentials, extractApiKey, isValidApiKey } from "@/sse/serv
 import { handleEmbedding } from "@omniroute/open-sse/handlers/embeddings.ts";
 import * as log from "@/sse/utils/logger";
 import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
-import { isValidationFailure, v1EmbeddingsSchema, validateBody } from "@/shared/validation/schemas";
+import { v1EmbeddingsSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

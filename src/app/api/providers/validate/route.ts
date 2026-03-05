@@ -5,11 +5,8 @@ import {
   isAnthropicCompatibleProvider,
 } from "@/shared/constants/providers";
 import { validateProviderApiKey } from "@/lib/providers/validation";
-import {
-  isValidationFailure,
-  validateBody,
-  validateProviderApiKeySchema,
-} from "@/shared/validation/schemas";
+import { validateProviderApiKeySchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // POST /api/providers/validate - Validate API key with provider
 export async function POST(request) {

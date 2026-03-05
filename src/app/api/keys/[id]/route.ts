@@ -7,11 +7,8 @@ import {
 } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import {
-  isValidationFailure,
-  updateKeyPermissionsSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateKeyPermissionsSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/keys/[id] - Get single API key
 export async function GET(request, { params }) {

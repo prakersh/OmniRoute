@@ -5,7 +5,8 @@ import { syncToCloud, fetchWithTimeout, CLOUD_URL } from "@/lib/cloudSync";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { cloudSyncActionSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { cloudSyncActionSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/sync/cloud

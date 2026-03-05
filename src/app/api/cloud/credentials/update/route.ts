@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateApiKey, getProviderConnections, updateProviderConnection } from "@/models";
-import { cloudCredentialUpdateSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { cloudCredentialUpdateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // Update provider credentials (for cloud token refresh)
 export async function PUT(request: Request) {

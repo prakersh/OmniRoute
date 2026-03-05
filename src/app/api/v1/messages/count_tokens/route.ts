@@ -1,9 +1,6 @@
 import { CORS_HEADERS } from "@/shared/utils/cors";
-import {
-  isValidationFailure,
-  v1CountTokensSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { v1CountTokensSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

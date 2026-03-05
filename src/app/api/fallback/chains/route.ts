@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAllFallbackChains, registerFallback, removeFallback } from "@/domain/fallbackPolicy";
-import {
-  isValidationFailure,
-  registerFallbackSchema,
-  removeFallbackSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { registerFallbackSchema, removeFallbackSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

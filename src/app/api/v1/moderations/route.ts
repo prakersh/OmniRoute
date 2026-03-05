@@ -5,7 +5,8 @@ import { parseModerationModel } from "@omniroute/open-sse/config/moderationRegis
 import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
 import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
 import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
-import { isValidationFailure, v1ModerationSchema, validateBody } from "@/shared/validation/schemas";
+import { v1ModerationSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

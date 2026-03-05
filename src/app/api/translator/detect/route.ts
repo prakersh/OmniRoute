@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { detectFormat } from "@omniroute/open-sse/services/provider.ts";
-import {
-  isValidationFailure,
-  translatorDetectSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { translatorDetectSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * POST /api/translator/detect

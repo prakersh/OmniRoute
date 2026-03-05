@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listSuites, runSuite } from "@/lib/evals/evalRunner";
-import { evalRunSuiteSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { evalRunSuiteSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

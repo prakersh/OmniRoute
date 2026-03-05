@@ -8,11 +8,8 @@ import {
   getRateLimitStatus,
   getAllRateLimitStatus,
 } from "@omniroute/open-sse/services/rateLimitManager.ts";
-import {
-  isValidationFailure,
-  toggleRateLimitSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { toggleRateLimitSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 type JsonRecord = Record<string, unknown>;
 

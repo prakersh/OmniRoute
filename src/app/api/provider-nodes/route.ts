@@ -5,11 +5,8 @@ import {
   ANTHROPIC_COMPATIBLE_PREFIX,
 } from "@/shared/constants/providers";
 import { generateId } from "@/shared/utils";
-import {
-  createProviderNodeSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { createProviderNodeSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const OPENAI_COMPATIBLE_DEFAULTS = {
   baseUrl: "https://api.openai.com/v1",

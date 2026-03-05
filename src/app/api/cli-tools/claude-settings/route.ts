@@ -10,11 +10,8 @@ import {
 } from "@/shared/services/cliRuntime";
 import { createBackup } from "@/shared/services/backupService";
 import { saveCliToolLastConfigured, deleteCliToolLastConfigured } from "@/lib/db/cliToolState";
-import {
-  cliSettingsEnvSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliSettingsEnvSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // Get claude settings path based on OS
 const getClaudeSettingsPath = () => getCliPrimaryConfigPath("claude");

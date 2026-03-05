@@ -6,11 +6,8 @@ import {
   resolveProxyForConnection,
 } from "../../../../lib/localDb";
 import { clearDispatcherCache } from "@omniroute/open-sse/utils/proxyDispatcher";
-import {
-  isValidationFailure,
-  updateProxyConfigSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateProxyConfigSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 import type { z } from "zod";
 
 const BASE_SUPPORTED_PROXY_TYPES = new Set(["http", "https"]);

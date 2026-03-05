@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
 import bcrypt from "bcryptjs";
-import {
-  isValidationFailure,
-  updateRequireLoginSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateRequireLoginSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

@@ -12,11 +12,8 @@ import {
 } from "@/shared/constants/providers";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import {
-  createProviderSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { createProviderSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/providers - List all connections
 export async function GET() {

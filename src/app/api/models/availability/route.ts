@@ -4,11 +4,8 @@ import {
   clearModelUnavailability,
   getUnavailableCount,
 } from "@/domain/modelAvailability";
-import {
-  clearModelAvailabilitySchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { clearModelAvailabilitySchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

@@ -3,11 +3,8 @@
 import { NextResponse } from "next/server";
 import { listBackups, restoreBackup, deleteBackup } from "@/shared/services/backupService";
 import { ensureCliConfigWriteAllowed } from "@/shared/services/cliRuntime";
-import {
-  cliBackupMutationSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliBackupMutationSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const VALID_TOOLS = ["claude", "codex", "droid", "openclaw", "cline", "kilo"];
 

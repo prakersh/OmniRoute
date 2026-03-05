@@ -5,11 +5,8 @@ import {
   removeCustomModel,
 } from "@/lib/localDb";
 import { isAuthenticated } from "@/shared/utils/apiAuth";
-import {
-  isValidationFailure,
-  providerModelMutationSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { providerModelMutationSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/provider-models?provider=<id>

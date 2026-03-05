@@ -3,11 +3,8 @@ import { getModelAliases, setModelAlias, deleteModelAlias, isCloudEnabled } from
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
 import { isAuthenticated } from "@/shared/utils/apiAuth";
-import {
-  cloudModelAliasUpdateSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cloudModelAliasUpdateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/models/alias - Get all aliases
 export async function GET(request) {

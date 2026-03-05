@@ -5,12 +5,8 @@ import fs from "fs/promises";
 import path from "path";
 import { ensureCliConfigWriteAllowed, getCliConfigPaths } from "@/shared/services/cliRuntime";
 import { resolveDataDir } from "@/lib/dataPaths";
-import {
-  codexProfileIdSchema,
-  codexProfileNameSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { codexProfileIdSchema, codexProfileNameSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const PROFILES_DIR = path.join(resolveDataDir(), "codex-profiles");
 

@@ -5,7 +5,8 @@ import { parseRerankModel } from "@omniroute/open-sse/config/rerankRegistry.ts";
 import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
 import { HTTP_STATUS } from "@omniroute/open-sse/config/constants.ts";
 import { enforceApiKeyPolicy } from "@/shared/utils/apiKeyPolicy";
-import { isValidationFailure, v1RerankSchema, validateBody } from "@/shared/validation/schemas";
+import { v1RerankSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * Handle CORS preflight

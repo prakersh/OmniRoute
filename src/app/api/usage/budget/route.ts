@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCostSummary, setBudget, checkBudget } from "@/domain/costRules";
-import { isValidationFailure, setBudgetSchema, validateBody } from "@/shared/validation/schemas";
+import { setBudgetSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET(request) {
   try {

@@ -5,7 +5,8 @@ import {
   proxyConfigToUrl,
   proxyUrlForLogs,
 } from "@omniroute/open-sse/utils/proxyDispatcher.ts";
-import { isValidationFailure, testProxySchema, validateBody } from "@/shared/validation/schemas";
+import { testProxySchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const BASE_SUPPORTED_PROXY_TYPES = new Set(["http", "https"]);
 

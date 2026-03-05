@@ -18,12 +18,11 @@ import { startLocalServer } from "@/lib/oauth/utils/server";
 import { getProxyConfig } from "@/lib/localDb";
 import { runWithProxyContext } from "@omniroute/open-sse/utils/proxyFetch.ts";
 import {
-  isValidationFailure,
   jsonObjectSchema,
   oauthExchangeSchema,
   oauthPollSchema,
-  validateBody,
 } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // Use globalThis to persist callback server state across Next.js HMR reloads
 if (!globalThis.__codexCallbackState) {

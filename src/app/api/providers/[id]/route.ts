@@ -7,11 +7,8 @@ import {
 } from "@/models";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import {
-  isValidationFailure,
-  updateProviderConnectionSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateProviderConnectionSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/providers/[id] - Get single connection
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {

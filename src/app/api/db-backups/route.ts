@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { listDbBackups, restoreDbBackup, backupDbFile } from "@/lib/localDb";
-import {
-  dbBackupRestoreSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { dbBackupRestoreSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * PUT /api/db-backups — Trigger a manual backup snapshot.

@@ -10,11 +10,8 @@ import {
 } from "@/shared/services/cliRuntime";
 import { createMultiBackup } from "@/shared/services/backupService";
 import { saveCliToolLastConfigured, deleteCliToolLastConfigured } from "@/lib/db/cliToolState";
-import {
-  cliModelConfigSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliModelConfigSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const getCodexConfigPath = () => getCliConfigPaths("codex").config;
 const getCodexAuthPath = () => getCliConfigPaths("codex").auth;

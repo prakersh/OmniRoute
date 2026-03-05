@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { validateApiKey, getModelAliases, setModelAlias, isCloudEnabled } from "@/models";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import { cloudModelAliasUpdateSchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { cloudModelAliasUpdateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // PUT /api/cloud/models/alias - Set model alias (for cloud/CLI)
 export async function PUT(request: Request) {

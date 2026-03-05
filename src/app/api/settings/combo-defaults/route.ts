@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, updateSettings } from "@/lib/localDb";
-import {
-  isValidationFailure,
-  updateComboDefaultsSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateComboDefaultsSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/settings/combo-defaults

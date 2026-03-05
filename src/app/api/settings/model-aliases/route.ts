@@ -10,11 +10,10 @@ import {
 import { getSettings, updateSettings } from "@/lib/db/settings";
 import {
   addModelAliasSchema,
-  isValidationFailure,
   removeModelAliasSchema,
   updateModelAliasesSchema,
-  validateBody,
 } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * GET /api/settings/model-aliases

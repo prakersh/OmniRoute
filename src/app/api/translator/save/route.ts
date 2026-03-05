@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import {
-  isValidationFailure,
-  translatorSaveSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { translatorSaveSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function POST(request) {
   let rawBody;

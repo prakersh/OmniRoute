@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getComboByName } from "@/lib/localDb";
-import { isValidationFailure, testComboSchema, validateBody } from "@/shared/validation/schemas";
+import { testComboSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 /**
  * POST /api/combos/test - Quick test a combo

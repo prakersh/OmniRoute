@@ -5,11 +5,8 @@ import {
   getThinkingBudgetConfig,
   ThinkingMode,
 } from "@omniroute/open-sse/services/thinkingBudget.ts";
-import {
-  isValidationFailure,
-  updateThinkingBudgetSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { updateThinkingBudgetSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

@@ -1,11 +1,8 @@
 import { CORS_ORIGIN } from "@/shared/utils/cors";
 import { handleChat } from "@/sse/handlers/chat";
 import { initTranslators } from "@omniroute/open-sse/translator/index.ts";
-import {
-  isValidationFailure,
-  v1betaGeminiGenerateSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { v1betaGeminiGenerateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 let initialized = false;
 

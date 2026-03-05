@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getApiKeys, createApiKey, isCloudEnabled } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
 import { syncToCloud } from "@/lib/cloudSync";
-import { createKeySchema, isValidationFailure, validateBody } from "@/shared/validation/schemas";
+import { createKeySchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 // GET /api/keys - List API keys
 export async function GET() {

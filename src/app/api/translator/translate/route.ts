@@ -8,11 +8,8 @@ import {
 import { translateRequest } from "@omniroute/open-sse/translator/index.ts";
 import { FORMATS } from "@omniroute/open-sse/translator/formats.ts";
 import { getProviderConnections } from "@/lib/localDb";
-import {
-  isValidationFailure,
-  translatorTranslateSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { translatorTranslateSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 type JsonRecord = Record<string, unknown>;
 

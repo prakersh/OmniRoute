@@ -7,11 +7,8 @@ import os from "os";
 import { ensureCliConfigWriteAllowed, getCliRuntimeStatus } from "@/shared/services/cliRuntime";
 import { createBackup } from "@/shared/services/backupService";
 import { saveCliToolLastConfigured, deleteCliToolLastConfigured } from "@/lib/db/cliToolState";
-import {
-  cliModelConfigSchema,
-  isValidationFailure,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { cliModelConfigSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 const CLINE_DATA_DIR = path.join(os.homedir(), ".cline", "data");
 const GLOBAL_STATE_PATH = path.join(CLINE_DATA_DIR, "globalState.json");

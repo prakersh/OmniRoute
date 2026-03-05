@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAllCircuitBreakerStatuses } from "@/shared/utils/circuitBreaker";
 import { getLockedIdentifiers, forceUnlock } from "@/domain/lockoutPolicy";
-import { isValidationFailure, policyActionSchema, validateBody } from "@/shared/validation/schemas";
+import { policyActionSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 export async function GET() {
   try {

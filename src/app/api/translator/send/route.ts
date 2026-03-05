@@ -8,11 +8,8 @@ import {
 import { getProviderConnections } from "@/lib/localDb";
 import { toJsonErrorPayload } from "@/shared/utils/upstreamError";
 import { logTranslationEvent } from "@/lib/translatorEvents";
-import {
-  isValidationFailure,
-  translatorSendSchema,
-  validateBody,
-} from "@/shared/validation/schemas";
+import { translatorSendSchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 
 function getProviderBaseUrl(providerSpecificData: unknown): string | undefined {
   if (!providerSpecificData || typeof providerSpecificData !== "object") return undefined;
