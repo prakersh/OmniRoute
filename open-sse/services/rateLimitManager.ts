@@ -81,6 +81,7 @@ export async function initializeRateLimits() {
     const connections = await getProviderConnections();
     let explicitCount = 0;
     let autoCount = 0;
+    let customCount = 0;
 
     for (const connRaw of connections as unknown[]) {
       const conn = toRecord(connRaw);
@@ -88,9 +89,33 @@ export async function initializeRateLimits() {
       const provider = typeof conn.provider === "string" ? conn.provider : "";
       const isActive = conn.isActive === true;
       const rateLimitProtection = conn.rateLimitProtection === true;
+      const customRpm = toNumber(conn.customRpm, 0);
+      const customTpm = toNumber(conn.customTpm, 0);
       if (!connectionId || !provider) continue;
 
-      if (rateLimitProtection) {
+      // Custom rpm/tpm configured — enable rate limiting with user-defined values (#198)
+      if (customRpm > 0 || customTpm > 0) {
+        enabledConnections.add(connectionId);
+        customCount++;
+
+        const key = `${provider}:${connectionId}`;
+        const rpm = customRpm > 0 ? customRpm : DEFAULT_API_LIMITS.requestsPerMinute;
+        const minTime = Math.max(0, Math.floor(60000 / rpm) - 10);
+
+        if (!limiters.has(key)) {
+          limiters.set(
+            key,
+            new Bottleneck({
+              maxConcurrent: DEFAULT_API_LIMITS.concurrentRequests,
+              minTime,
+              reservoir: rpm,
+              reservoirRefreshAmount: rpm,
+              reservoirRefreshInterval: 60 * 1000,
+              id: key,
+            })
+          );
+        }
+      } else if (rateLimitProtection) {
         // Explicitly enabled by user
         enabledConnections.add(connectionId);
         explicitCount++;
@@ -117,9 +142,9 @@ export async function initializeRateLimits() {
       }
     }
 
-    if (explicitCount > 0 || autoCount > 0) {
+    if (explicitCount > 0 || autoCount > 0 || customCount > 0) {
       console.log(
-        `🛡️ [RATE-LIMIT] Loaded ${explicitCount} explicit + ${autoCount} auto-enabled (API key) protection(s)`
+        `🛡️ [RATE-LIMIT] Loaded ${explicitCount} explicit + ${autoCount} auto-enabled + ${customCount} custom rpm/tpm protection(s)`
       );
     }
 

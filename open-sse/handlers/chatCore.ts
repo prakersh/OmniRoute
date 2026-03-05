@@ -151,11 +151,18 @@ export async function handleChatCore({
   // Translate request (pass reqLogger for intermediate logging)
   let translatedBody = body;
   try {
+    // Issue #199: Disable tool name prefix when routing Claude-format requests
+    // to non-Claude backends (prefix causes tool name mismatches)
+    const claudeProviders = ["claude", "anthropic"];
+    if (targetFormat === FORMATS.CLAUDE && !claudeProviders.includes(provider?.toLowerCase?.())) {
+      translatedBody = { ...translatedBody, _disableToolPrefix: true };
+    }
+
     translatedBody = translateRequest(
       sourceFormat,
       targetFormat,
       model,
-      body,
+      translatedBody,
       stream,
       credentials,
       provider,
@@ -202,6 +209,7 @@ export async function handleChatCore({
   // Extract toolNameMap for response translation (Claude OAuth)
   const toolNameMap = translatedBody._toolNameMap;
   delete translatedBody._toolNameMap;
+  delete translatedBody._disableToolPrefix;
 
   // Update model in body
   translatedBody.model = model;

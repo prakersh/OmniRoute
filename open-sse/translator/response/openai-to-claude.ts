@@ -1,8 +1,6 @@
 import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
-
-// Prefix for Claude OAuth tool names (must match request translator)
-const CLAUDE_OAUTH_TOOL_PREFIX = "proxy_";
+import { CLAUDE_OAUTH_TOOL_PREFIX } from "../request/openai-to-claude.ts";
 
 // Helper: stop thinking block if started
 function stopThinkingBlock(state, results) {
