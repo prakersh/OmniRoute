@@ -1,14 +1,27 @@
-import { ProxyAgent } from "undici";
+import { ProxyAgent, type Dispatcher } from "undici";
 import { socksDispatcher } from "fetch-socks";
 
 const DISPATCHER_CACHE_KEY = Symbol.for("omniroute.proxyDispatcher.cache");
 const SUPPORTED_PROTOCOLS = new Set(["http:", "https:", "socks5:"]);
 
-function getDispatcherCache(): Map<string, any> {
-  if (!globalThis[DISPATCHER_CACHE_KEY]) {
-    globalThis[DISPATCHER_CACHE_KEY] = new Map();
+type DispatcherCache = Map<string, Dispatcher>;
+type GlobalWithDispatcherCache = typeof globalThis & {
+  [DISPATCHER_CACHE_KEY]?: DispatcherCache;
+};
+type SocksDispatcherOptions = {
+  type: number;
+  host: string;
+  port: number;
+  userId?: string;
+  password?: string;
+};
+
+function getDispatcherCache(): DispatcherCache {
+  const globalWithCache = globalThis as GlobalWithDispatcherCache;
+  if (!globalWithCache[DISPATCHER_CACHE_KEY]) {
+    globalWithCache[DISPATCHER_CACHE_KEY] = new Map();
   }
-  return globalThis[DISPATCHER_CACHE_KEY];
+  return globalWithCache[DISPATCHER_CACHE_KEY];
 }
 
 /**
@@ -59,10 +72,9 @@ function normalizePort(port, protocol) {
  * listen on these ports, so we must always include the port explicitly.
  */
 function buildProxyUrlString(parsed, port) {
-  const auth =
-    parsed.username
-      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}@`
-      : "";
+  const auth = parsed.username
+    ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}@`
+    : "";
   return `${parsed.protocol}//${auth}${parsed.hostname}:${port}`;
 }
 
@@ -166,14 +178,16 @@ export function createProxyDispatcher(proxyUrl) {
   const port = explicitPort || normalizePort(parsed.port, parsed.protocol);
 
   if (parsed.protocol === "socks5:") {
-    const socksOptions: Record<string, any> = {
+    const socksOptions: SocksDispatcherOptions = {
       type: 5,
       host: parsed.hostname,
       port: Number(port),
     };
     if (parsed.username) socksOptions.userId = decodeURIComponent(parsed.username);
     if (parsed.password) socksOptions.password = decodeURIComponent(parsed.password);
-    dispatcher = socksDispatcher(socksOptions as any);
+    dispatcher = socksDispatcher(
+      socksOptions as Parameters<typeof socksDispatcher>[0]
+    ) as Dispatcher;
   } else {
     dispatcher = new ProxyAgent(normalizedUrl);
   }

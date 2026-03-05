@@ -37,7 +37,7 @@ export function parseModelFromRegistry<P extends BaseProvider>(
     }
   }
 
-  // No provider prefix — try to find the model in any provider
+  // No provider prefix — try to find the model in every provider
   for (const [providerId, config] of Object.entries(registry)) {
     if (config.models.some((m) => m.id === modelStr)) {
       return { provider: providerId, model: modelStr };

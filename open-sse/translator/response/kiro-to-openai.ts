@@ -155,7 +155,7 @@ export function convertKiroToOpenAI(chunk, state) {
   if (eventType === "messageStopEvent" || eventType === "done" || data.messageStopEvent) {
     state.finishReason = "stop"; // Mark for usage injection in stream.js
 
-    const openaiChunk: Record<string, any> = {
+    const openaiChunk: Record<string, unknown> = {
       id: state.responseId,
       object: "chat.completion.chunk",
       created: state.created,

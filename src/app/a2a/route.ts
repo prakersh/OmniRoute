@@ -16,6 +16,7 @@ import { executeSmartRouting } from "@/lib/a2a/skills/smartRouting";
 import { executeQuotaManagement } from "@/lib/a2a/skills/quotaManagement";
 import { logRoutingDecision } from "@/lib/a2a/routingLogger";
 import { createA2AStream, SSE_HEADERS } from "@/lib/a2a/streaming";
+import { executeA2ATaskWithState } from "@/lib/a2a/taskExecution";
 
 // ============ Skill Registry ============
 
@@ -139,11 +140,7 @@ export async function POST(req: NextRequest) {
 
       const stream = createA2AStream(
         task,
-        async (t) => {
-          const result = await handler(t);
-          tm.updateTask(t.id, "completed", result.artifacts);
-          return result;
-        },
+        async (t) => executeA2ATaskWithState(tm, t, handler),
         req.signal
       );
 

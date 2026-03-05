@@ -16,7 +16,7 @@ import { errorResponse } from "../utils/error.ts";
  * @param {Object} options.credentials - Provider credentials { apiKey }
  * @returns {Response}
  */
-/** @returns {Promise<any>} */
+/** @returns {Promise<unknown>} */
 export async function handleModeration({ body, credentials }) {
   if (!body.input) {
     return errorResponse(400, "input is required");

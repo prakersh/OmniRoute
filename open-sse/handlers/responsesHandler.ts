@@ -50,7 +50,7 @@ export async function handleResponsesCore({
     connectionId,
     userAgent: null,
     comboName: null,
-  } as any);
+  });
 
   if (!result.success || !result.response) {
     return result;

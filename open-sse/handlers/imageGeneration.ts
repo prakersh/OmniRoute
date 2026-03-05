@@ -246,7 +246,7 @@ async function handleOpenAIImageGeneration({
   };
 
   // Build upstream request (OpenAI-compatible format)
-  const upstreamBody: Record<string, any> = {
+  const upstreamBody: Record<string, unknown> = {
     model: model,
     prompt: body.prompt,
   };
@@ -612,7 +612,8 @@ async function handleSDWebUIImageGeneration({ model, provider, providerConfig, b
 
     if (!response.ok) {
       const errorText = await response.text();
-      if (log) log.error("IMAGE", `${provider} error ${response.status}: ${errorText.slice(0, 200)}`);
+      if (log)
+        log.error("IMAGE", `${provider} error ${response.status}: ${errorText.slice(0, 200)}`);
 
       saveCallLog({
         method: "POST",

@@ -91,7 +91,9 @@ export class A2ATaskManager {
   getTask(taskId: string): A2ATask | undefined {
     const task = this.tasks.get(taskId);
     if (task && new Date(task.expiresAt) < new Date()) {
-      this.updateTask(taskId, "failed", undefined, "Task expired");
+      if (task.state === "submitted" || task.state === "working") {
+        this.updateTask(taskId, "failed", undefined, "Task expired");
+      }
     }
     return this.tasks.get(taskId);
   }

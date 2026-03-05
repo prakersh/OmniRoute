@@ -22,7 +22,16 @@ function convertMessages(messages, tools, model) {
   const flushPending = () => {
     if (currentRole === "user") {
       const content = pendingUserContent.join("\n\n").trim() || "continue";
-      const userMsg: Record<string, any> = {
+      const userMsg: {
+        userInputMessage: {
+          content: string;
+          modelId: string;
+          userInputMessageContext?: {
+            toolResults?: Array<Record<string, unknown>>;
+            tools?: Array<Record<string, unknown>>;
+          };
+        };
+      } = {
         userInputMessage: {
           content: content,
           modelId: "",
@@ -255,7 +264,27 @@ export function buildKiroPayload(model, body, stream, credentials) {
   const timestamp = new Date().toISOString();
   finalContent = `[Context: Current time is ${timestamp}]\n\n${finalContent}`;
 
-  const payload: Record<string, any> = {
+  const payload: {
+    conversationState: {
+      chatTriggerType: string;
+      conversationId: string;
+      currentMessage: {
+        userInputMessage: {
+          content: string;
+          modelId: string;
+          origin: string;
+          userInputMessageContext?: Record<string, unknown>;
+        };
+      };
+      history: unknown[];
+    };
+    profileArn?: string;
+    inferenceConfig?: {
+      maxTokens?: number;
+      temperature?: number;
+      topP?: number;
+    };
+  } = {
     conversationState: {
       chatTriggerType: "MANUAL",
       conversationId: uuidv4(),

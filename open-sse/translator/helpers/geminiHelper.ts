@@ -193,7 +193,7 @@ function mergeAllOf(obj) {
   if (!obj || typeof obj !== "object") return;
 
   if (obj.allOf && Array.isArray(obj.allOf)) {
-    const merged: Record<string, any> = {};
+    const merged: { properties?: Record<string, unknown>; required?: string[] } = {};
 
     for (const item of obj.allOf) {
       if (item.properties) {

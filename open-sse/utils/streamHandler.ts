@@ -1,5 +1,19 @@
 // Stream handler with disconnect detection - shared for all providers
 
+type StreamDisconnectEvent = {
+  reason: string;
+  duration: number;
+};
+
+type StreamControllerOptions = {
+  onDisconnect?: (event: StreamDisconnectEvent) => void;
+  log?: unknown;
+  provider?: string;
+  model?: string;
+};
+
+type StreamController = ReturnType<typeof createStreamController>;
+
 // Get HH:MM:SS timestamp
 function getTimeString() {
   return new Date().toLocaleTimeString("en-US", {
@@ -18,12 +32,17 @@ function getTimeString() {
  * @param {string} options.provider - Provider name
  * @param {string} options.model - Model name
  */
-/** @param {any} options */
-export function createStreamController({ onDisconnect, log, provider, model }: any = {}) {
+/** @param {StreamControllerOptions} options */
+export function createStreamController({
+  onDisconnect,
+  log,
+  provider,
+  model,
+}: StreamControllerOptions = {}) {
   const abortController = new AbortController();
   const startTime = Date.now();
   let disconnected = false;
-  let abortTimeout = null;
+  let abortTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const logStream = (status) => {
     const duration = Date.now() - startTime;
@@ -68,18 +87,22 @@ export function createStreamController({ onDisconnect, log, provider, model }: a
     },
 
     // Call on error
-    handleError: (error) => {
+    handleError: (error: unknown) => {
       if (abortTimeout) {
         clearTimeout(abortTimeout);
         abortTimeout = null;
       }
 
-      if (error.name === "AbortError") {
+      if (error instanceof Error && error.name === "AbortError") {
         logStream("aborted");
         return;
       }
 
-      logStream(`error: ${error.message}`);
+      if (error instanceof Error) {
+        logStream(`error: ${error.message}`);
+        return;
+      }
+      logStream("error: unknown");
     },
 
     abort: () => abortController.abort(),
@@ -129,7 +152,11 @@ export function createDisconnectAwareStream(transformStream, streamController) {
  * @param {TransformStream} transformStream - Transform stream for SSE
  * @param {object} streamController - Stream controller from createStreamController
  */
-export function pipeWithDisconnect(providerResponse, transformStream, streamController) {
+export function pipeWithDisconnect(
+  providerResponse: Response,
+  transformStream: TransformStream<Uint8Array, Uint8Array>,
+  streamController: StreamController
+) {
   const transformedBody = providerResponse.body.pipeThrough(transformStream);
   return createDisconnectAwareStream(
     { readable: transformedBody, writable: { getWriter: () => ({ abort: () => {} }) } },

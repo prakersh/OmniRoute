@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch as any;
+vi.stubGlobal("fetch", mockFetch);
 
 describe("MCP Advanced Tools", () => {
   beforeEach(() => {
@@ -78,7 +78,7 @@ describe("MCP Advanced Tools", () => {
 
       const response = await mockFetch("http://localhost:20128/api/combos");
       const combos = await response.json();
-      const combo = combos.find((c: any) => c.id === "test-combo");
+      const combo = combos.find((c: { id?: string }) => c.id === "test-combo");
       expect(combo).toBeDefined();
       expect(combo.models).toHaveLength(2);
     });

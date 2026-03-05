@@ -70,7 +70,7 @@ function transformResponseFromProvider(providerConfig, data) {
  * @param {Object} options.credentials - Provider credentials { apiKey, accessToken }
  * @returns {Response}
  */
-/** @returns {Promise<any>} */
+/** @returns {Promise<unknown>} */
 export async function handleRerank({
   model,
   query,

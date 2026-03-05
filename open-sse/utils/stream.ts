@@ -19,6 +19,46 @@ import {
 
 export { COLORS, formatSSE };
 
+type JsonRecord = Record<string, unknown>;
+
+type StreamLogger = {
+  appendProviderChunk?: (value: string) => void;
+  appendConvertedChunk?: (value: string) => void;
+  appendOpenAIChunk?: (value: string) => void;
+};
+
+type StreamCompletePayload = {
+  status: number;
+  usage: unknown;
+};
+
+type StreamOptions = {
+  mode?: string;
+  targetFormat?: string;
+  sourceFormat?: string;
+  provider?: string | null;
+  reqLogger?: StreamLogger | null;
+  toolNameMap?: unknown;
+  model?: string | null;
+  connectionId?: string | null;
+  apiKeyInfo?: unknown;
+  body?: unknown;
+  onComplete?: ((payload: StreamCompletePayload) => void) | null;
+};
+
+type TranslateState = ReturnType<typeof initState> & {
+  provider?: string | null;
+  toolNameMap?: unknown;
+  usage?: unknown;
+  finishReason?: unknown;
+};
+
+function getOpenAIIntermediateChunks(value: unknown): unknown[] {
+  if (!value || typeof value !== "object") return [];
+  const candidate = (value as JsonRecord)._openaiIntermediate;
+  return Array.isArray(candidate) ? candidate : [];
+}
+
 // Note: TextDecoder/TextEncoder are created per-stream inside createSSEStream()
 // to avoid shared state issues with concurrent streams (TextDecoder with {stream:true}
 // maintains internal buffering state between decode() calls).
@@ -48,15 +88,13 @@ const STREAM_MODE = {
  * @param {object} options.body - Request body (for input token estimation)
  * @param {function} options.onComplete - Callback when stream finishes: ({ status, usage }) => void
  */
-/** @param {any} options */
-export function createSSEStream(options: any = {}) {
+export function createSSEStream(options: StreamOptions = {}) {
   const {
     mode = STREAM_MODE.TRANSLATE,
     targetFormat,
     sourceFormat,
     provider = null,
     reqLogger = null,
-    /** @type {any} */
     toolNameMap = null,
     model = null,
     connectionId = null,
@@ -69,8 +107,10 @@ export function createSSEStream(options: any = {}) {
   let usage = null;
 
   // State for translate mode
-  const state =
-    mode === STREAM_MODE.TRANSLATE ? { ...initState(sourceFormat), provider, toolNameMap } : null;
+  const state: TranslateState | null =
+    mode === STREAM_MODE.TRANSLATE
+      ? { ...(initState(sourceFormat) as TranslateState), provider, toolNameMap }
+      : null;
 
   // Track content length for usage estimation (both modes)
   let totalContentLength = 0;
@@ -84,7 +124,7 @@ export function createSSEStream(options: any = {}) {
 
   // Idle timeout state — closes stream if provider stops sending data
   let lastChunkTime = Date.now();
-  let idleTimer = null;
+  let idleTimer: ReturnType<typeof setInterval> | null = null;
   let streamTimedOut = false;
 
   return new TransformStream(
@@ -270,11 +310,9 @@ export function createSSEStream(options: any = {}) {
           const translated = translateResponse(targetFormat, sourceFormat, parsed, state);
 
           // Log OpenAI intermediate chunks (if available)
-          if ((translated as any)?._openaiIntermediate) {
-            for (const item of (translated as any)._openaiIntermediate) {
-              const openaiOutput = formatSSE(item, FORMATS.OPENAI);
-              reqLogger?.appendOpenAIChunk?.(openaiOutput);
-            }
+          for (const item of getOpenAIIntermediateChunks(translated)) {
+            const openaiOutput = formatSSE(item, FORMATS.OPENAI);
+            reqLogger?.appendOpenAIChunk?.(openaiOutput);
           }
 
           if (translated?.length > 0) {
@@ -366,11 +404,9 @@ export function createSSEStream(options: any = {}) {
               const translated = translateResponse(targetFormat, sourceFormat, parsed, state);
 
               // Log OpenAI intermediate chunks
-              if ((translated as any)?._openaiIntermediate) {
-                for (const item of (translated as any)._openaiIntermediate) {
-                  const openaiOutput = formatSSE(item, FORMATS.OPENAI);
-                  reqLogger?.appendOpenAIChunk?.(openaiOutput);
-                }
+              for (const item of getOpenAIIntermediateChunks(translated)) {
+                const openaiOutput = formatSSE(item, FORMATS.OPENAI);
+                reqLogger?.appendOpenAIChunk?.(openaiOutput);
               }
 
               if (translated?.length > 0) {
@@ -387,11 +423,9 @@ export function createSSEStream(options: any = {}) {
           const flushed = translateResponse(targetFormat, sourceFormat, null, state);
 
           // Log OpenAI intermediate chunks for flushed events
-          if ((flushed as any)?._openaiIntermediate) {
-            for (const item of (flushed as any)._openaiIntermediate) {
-              const openaiOutput = formatSSE(item, FORMATS.OPENAI);
-              reqLogger?.appendOpenAIChunk?.(openaiOutput);
-            }
+          for (const item of getOpenAIIntermediateChunks(flushed)) {
+            const openaiOutput = formatSSE(item, FORMATS.OPENAI);
+            reqLogger?.appendOpenAIChunk?.(openaiOutput);
           }
 
           if (flushed?.length > 0) {
@@ -456,16 +490,16 @@ export function createSSEStream(options: any = {}) {
 
 // Convenience functions for backward compatibility
 export function createSSETransformStreamWithLogger(
-  targetFormat,
-  sourceFormat,
-  provider = null,
-  reqLogger = null,
-  toolNameMap = null,
-  model = null,
-  connectionId = null,
-  body = null,
-  onComplete = null,
-  apiKeyInfo = null
+  targetFormat: string,
+  sourceFormat: string,
+  provider: string | null = null,
+  reqLogger: StreamLogger | null = null,
+  toolNameMap: unknown = null,
+  model: string | null = null,
+  connectionId: string | null = null,
+  body: unknown = null,
+  onComplete: ((payload: StreamCompletePayload) => void) | null = null,
+  apiKeyInfo: unknown = null
 ) {
   return createSSEStream({
     mode: STREAM_MODE.TRANSLATE,
@@ -483,13 +517,13 @@ export function createSSETransformStreamWithLogger(
 }
 
 export function createPassthroughStreamWithLogger(
-  provider = null,
-  reqLogger = null,
-  model = null,
-  connectionId = null,
-  body = null,
-  onComplete = null,
-  apiKeyInfo = null
+  provider: string | null = null,
+  reqLogger: StreamLogger | null = null,
+  model: string | null = null,
+  connectionId: string | null = null,
+  body: unknown = null,
+  onComplete: ((payload: StreamCompletePayload) => void) | null = null,
+  apiKeyInfo: unknown = null
 ) {
   return createSSEStream({
     mode: STREAM_MODE.PASSTHROUGH,

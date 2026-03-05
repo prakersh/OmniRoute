@@ -524,7 +524,7 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
       const reason = hadToolCalls ? "tool_calls" : "stop";
       state.finishReason = reason; // Mark for usage injection in stream.js
 
-      const finalChunk: Record<string, any> = {
+      const finalChunk: Record<string, unknown> = {
         id: state.chatId,
         object: "chat.completion.chunk",
         created: state.created,

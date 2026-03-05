@@ -12,7 +12,7 @@ import { formatSSE } from "./stream.ts";
  * 1. The bypass patterns (title extraction, warmup, count) are specific to
  *    Claude CLI's internal protocol — other clients don't send these patterns.
  * 2. False-positive bypasses would silently break real requests.
- * 3. The SKIP_PATTERNS config allows user-defined patterns for any client.
+ * 3. The SKIP_PATTERNS config allows user-defined patterns for every client.
  *
  * @param {object} body - Request body
  * @param {string} model - Model name

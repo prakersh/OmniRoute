@@ -44,14 +44,15 @@ export function parseSSEToOpenAIResponse(rawSSE, fallbackModel) {
     }
   }
 
-  const message: Record<string, any> = { role: "assistant",
+  const message: Record<string, unknown> = {
+    role: "assistant",
     content: contentParts.join(""),
   };
   if (reasoningParts.length > 0) {
     message.reasoning_content = reasoningParts.join("");
   }
 
-  const result: Record<string, any> = {
+  const result: Record<string, unknown> = {
     id: first.id || `chatcmpl-${Date.now()}`,
     object: "chat.completion",
     created: first.created || Math.floor(Date.now() / 1000),

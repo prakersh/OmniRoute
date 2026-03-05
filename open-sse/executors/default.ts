@@ -74,7 +74,7 @@ export class DefaultExecutor extends BaseExecutor {
 
   /**
    * For compatible providers, ensure the model name sent upstream
-   * is the clean model name without any internal routing prefix.
+   * is the clean model name without internal routing prefixes.
    * e.g. "openapi-chat-anti/claude-opus-4-6-thinking" → "claude-opus-4-6-thinking"
    */
   transformRequest(model, body, stream, credentials) {

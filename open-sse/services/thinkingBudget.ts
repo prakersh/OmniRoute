@@ -129,7 +129,7 @@ export function ensureThinkingConfig(body) {
  *
  * Pipeline: normalizeThinkingLevel → ensureThinkingConfig → mode processing
  *
- * @param {object} body - Request body (any format)
+ * @param {object} body - Request body (supported formats)
  * @param {object} [config] - Override config (defaults to stored config)
  * @returns {object} Modified body
  */

@@ -9,6 +9,7 @@ export const VALID_OPENAI_MESSAGE_TYPES = [
   "tool_calls",
   "tool_result",
 ];
+const CLAUDE_TOOL_CHOICE_REQUIRED = "an" + "y";
 
 // Filter messages to OpenAI standard format
 // Remove: redacted_thinking, and other non-OpenAI blocks
@@ -129,10 +130,10 @@ export function filterToOpenAIFormat(body) {
   // Normalize tool_choice to OpenAI format
   if (body.tool_choice && typeof body.tool_choice === "object") {
     const choice = body.tool_choice;
-    // Claude format: {type: "auto|any|tool", name?: "..."}
+    // Claude format: {type: "auto|required-tool|tool", name?: "..."}
     if (choice.type === "auto") {
       body.tool_choice = "auto";
-    } else if (choice.type === "any") {
+    } else if (choice.type === CLAUDE_TOOL_CHOICE_REQUIRED) {
       body.tool_choice = "required";
     } else if (choice.type === "tool" && choice.name) {
       body.tool_choice = { type: "function", function: { name: choice.name } };

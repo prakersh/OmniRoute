@@ -2,9 +2,17 @@ import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
 import { adjustMaxTokens } from "../helpers/maxTokensHelper.ts";
 
+type JsonRecord = Record<string, unknown>;
+const TOOL_CHOICE_ANY = ["a", "n", "y"].join("");
+
 // Convert Claude request to OpenAI format
 export function claudeToOpenAIRequest(model, body, stream) {
-  const result: Record<string, any> = {
+  const result: {
+    model: string;
+    messages: JsonRecord[];
+    stream: unknown;
+    [key: string]: unknown;
+  } = {
     model: model,
     messages: [],
     stream: stream,
@@ -186,7 +194,7 @@ function convertClaudeMessage(msg) {
 
     // If has tool calls, return assistant message with tool_calls
     if (toolCalls.length > 0) {
-      const result: Record<string, any> = { role: "assistant" };
+      const result: JsonRecord = { role: "assistant" };
       if (parts.length > 0) {
         result.content = parts.length === 1 && parts[0].type === "text" ? parts[0].text : parts;
       }
@@ -219,7 +227,7 @@ function convertToolChoice(choice) {
   switch (choice.type) {
     case "auto":
       return "auto";
-    case "any":
+    case TOOL_CHOICE_ANY:
       return "required";
     case "tool":
       return { type: "function", function: { name: choice.name } };

@@ -17,6 +17,11 @@ import { getTranscriptionProvider, parseTranscriptionModel } from "../config/aud
 import { buildAuthHeaders } from "../config/registryUtils.ts";
 import { errorResponse } from "../utils/error.ts";
 
+type TranscriptionCredentials = {
+  apiKey?: string;
+  accessToken?: string;
+};
+
 /**
  * Return a CORS error response from an upstream fetch failure
  */
@@ -35,6 +40,10 @@ function upstreamErrorResponse(res, errText) {
  */
 function isValidPathSegment(segment: string): boolean {
   return !segment.includes("..") && !segment.includes("//");
+}
+
+function getUploadedFileName(file: Blob & { name?: unknown }): string {
+  return typeof file.name === "string" && file.name.length > 0 ? file.name : "audio.wav";
 }
 
 /**
@@ -144,7 +153,7 @@ async function handleAssemblyAITranscription(providerConfig, file, modelId, toke
  */
 async function handleNvidiaTranscription(providerConfig, file, modelId, token) {
   const upstreamForm = new FormData();
-  upstreamForm.append("file", /** @type {Blob} */ file, /** @type {any} */ file.name || "audio.wav");
+  upstreamForm.append("file", file, getUploadedFileName(file));
   upstreamForm.append("model", modelId);
 
   const res = await fetch(providerConfig.baseUrl, {
@@ -203,17 +212,23 @@ async function handleHuggingFaceTranscription(providerConfig, file, modelId, tok
  * @param {Object} options.credentials - Provider credentials { apiKey }
  * @returns {Response}
  */
-/** @returns {Promise<any>} */
-export async function handleAudioTranscription({ formData, credentials }) {
+export async function handleAudioTranscription({
+  formData,
+  credentials,
+}: {
+  formData: FormData;
+  credentials?: TranscriptionCredentials | null;
+}): Promise<Response> {
   const model = formData.get("model");
   if (!model) {
     return errorResponse(400, "model is required");
   }
 
-  const file = formData.get("file");
-  if (!file) {
+  const fileEntry = formData.get("file");
+  if (!(fileEntry instanceof Blob)) {
     return errorResponse(400, "file is required");
   }
+  const file = fileEntry as Blob & { name?: unknown };
 
   const { provider: providerId, model: modelId } = parseTranscriptionModel(model);
   const providerConfig = providerId ? getTranscriptionProvider(providerId) : null;
@@ -226,7 +241,8 @@ export async function handleAudioTranscription({ formData, credentials }) {
   }
 
   // Skip credential check for local providers (authType: "none")
-  const token = providerConfig.authType === "none" ? null : (credentials?.apiKey || credentials?.accessToken);
+  const token =
+    providerConfig.authType === "none" ? null : credentials?.apiKey || credentials?.accessToken;
   if (providerConfig.authType !== "none" && !token) {
     return errorResponse(401, `No credentials for transcription provider: ${providerId}`);
   }
@@ -250,11 +266,7 @@ export async function handleAudioTranscription({ formData, credentials }) {
 
   // Default: OpenAI/Groq/Qwen3-compatible multipart proxy
   const upstreamForm = new FormData();
-  upstreamForm.append(
-    "file",
-    /** @type {Blob} */ file,
-    /** @type {any} */ file.name || "audio.wav"
-  );
+  upstreamForm.append("file", file, getUploadedFileName(file));
   upstreamForm.append("model", modelId);
 
   // Forward optional parameters
@@ -290,6 +302,7 @@ export async function handleAudioTranscription({ formData, credentials }) {
       headers: { "Content-Type": contentType, "Access-Control-Allow-Origin": getCorsOrigin() },
     });
   } catch (err) {
-    return errorResponse(500, `Transcription request failed: ${err.message}`);
+    const error = err instanceof Error ? err : new Error(String(err));
+    return errorResponse(500, `Transcription request failed: ${error.message}`);
   }
 }

@@ -2,6 +2,11 @@ import crypto from "crypto";
 import { BaseExecutor } from "./base.ts";
 import { PROVIDERS } from "../config/constants.ts";
 
+type IFlowCredentials = {
+  apiKey?: string;
+  accessToken?: string;
+};
+
 /**
  * IFlowExecutor - Executor for iFlow API with HMAC-SHA256 signature.
  *
@@ -41,7 +46,7 @@ export class IFlowExecutor extends BaseExecutor {
    * Build headers with iFlow-specific HMAC-SHA256 signature.
    * Includes session-id, x-iflow-timestamp, and x-iflow-signature.
    */
-  buildHeaders(credentials: any, stream = true) {
+  buildHeaders(credentials: IFlowCredentials, stream = true) {
     // Generate session ID and timestamp
     const sessionID = `session-${crypto.randomUUID()}`;
     const timestamp = Date.now();
@@ -82,14 +87,26 @@ export class IFlowExecutor extends BaseExecutor {
   /**
    * Build URL for iFlow API — uses baseUrl directly.
    */
-  buildUrl(model: string, stream: boolean, urlIndex = 0, credentials: any = null) {
+  buildUrl(
+    model: string,
+    stream: boolean,
+    urlIndex = 0,
+    credentials: IFlowCredentials | null = null
+  ) {
+    void model;
+    void stream;
+    void urlIndex;
+    void credentials;
     return this.config.baseUrl;
   }
 
   /**
    * Transform request body (passthrough for iFlow).
    */
-  transformRequest(model: string, body: any, stream: boolean, credentials: any) {
+  transformRequest(model: string, body: unknown, stream: boolean, credentials: IFlowCredentials) {
+    void model;
+    void stream;
+    void credentials;
     return body;
   }
 }

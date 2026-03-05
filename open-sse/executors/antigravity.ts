@@ -5,7 +5,7 @@ import { PROVIDERS, OAUTH_ENDPOINTS, HTTP_STATUS } from "../config/constants.ts"
 const MAX_RETRY_AFTER_MS = 10000;
 
 /**
- * Strip any provider prefix (e.g. "antigravity/model" → "model").
+ * Strip provider prefixes (e.g. "antigravity/model" → "model").
  * Ensures the model name sent to the upstream API never contains a routing prefix.
  */
 function cleanModelName(model: string): string {

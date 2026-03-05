@@ -1,6 +1,16 @@
 import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
 
+type OpenAIUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    cache_creation_tokens?: number;
+  };
+};
+
 // Create OpenAI chunk helper
 function createChunk(state, delta, finishReason = null) {
   return {
@@ -133,7 +143,18 @@ export function claudeToOpenAIResponse(chunk, state) {
 
       if (chunk.delta?.stop_reason) {
         state.finishReason = convertStopReason(chunk.delta.stop_reason);
-        const finalChunk: Record<string, any> = {
+        const finalChunk: {
+          id: string;
+          object: string;
+          created: number;
+          model: string;
+          choices: Array<{
+            index: number;
+            delta: { content: string };
+            finish_reason: string | null;
+          }>;
+          usage?: OpenAIUsage;
+        } = {
           id: `chatcmpl-${state.messageId}`,
           object: "chat.completion.chunk",
           created: Math.floor(Date.now() / 1000),

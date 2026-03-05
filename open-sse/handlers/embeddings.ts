@@ -52,7 +52,7 @@ export async function handleEmbedding({ body, credentials, log }) {
   }
 
   // Build upstream request
-  const upstreamBody: Record<string, any> = {
+  const upstreamBody: Record<string, unknown> = {
     model: model,
     input: body.input,
   };

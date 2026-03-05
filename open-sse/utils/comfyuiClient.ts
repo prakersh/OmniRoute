@@ -5,14 +5,33 @@
  * poll for completion, and fetch output files from a ComfyUI server.
  */
 
+type JsonRecord = Record<string, unknown>;
+
+type ComfyOutputFile = {
+  filename: string;
+  subfolder?: string;
+  type?: string;
+};
+
+type ComfyNodeOutput = {
+  images?: ComfyOutputFile[];
+  gifs?: ComfyOutputFile[];
+  audio?: ComfyOutputFile[];
+};
+
+type ComfyHistoryEntry = {
+  outputs?: Record<string, ComfyNodeOutput>;
+};
+
+function toRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
 /**
  * Submit a workflow to ComfyUI for execution.
  * @returns The prompt_id for polling
  */
-export async function submitComfyWorkflow(
-  baseUrl: string,
-  workflow: object
-): Promise<string> {
+export async function submitComfyWorkflow(baseUrl: string, workflow: object): Promise<string> {
   const res = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -24,8 +43,12 @@ export async function submitComfyWorkflow(
     throw new Error(`ComfyUI submit failed (${res.status}): ${errText}`);
   }
 
-  const data = await res.json();
-  return data.prompt_id;
+  const data = toRecord(await res.json());
+  const promptId = data.prompt_id;
+  if (typeof promptId !== "string" || !promptId) {
+    throw new Error("ComfyUI submit failed: missing prompt_id");
+  }
+  return promptId;
 }
 
 /**
@@ -36,7 +59,7 @@ export async function pollComfyResult(
   baseUrl: string,
   promptId: string,
   timeoutMs: number = 120_000
-): Promise<any> {
+): Promise<ComfyHistoryEntry> {
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
@@ -45,8 +68,8 @@ export async function pollComfyResult(
     const res = await fetch(`${baseUrl}/history/${promptId}`);
     if (!res.ok) continue;
 
-    const data = await res.json();
-    const entry = data[promptId];
+    const data = toRecord(await res.json());
+    const entry = toRecord(data[promptId]) as ComfyHistoryEntry;
 
     if (entry && entry.outputs && Object.keys(entry.outputs).length > 0) {
       return entry;
@@ -84,12 +107,12 @@ export async function fetchComfyOutput(
  * Returns an array of { filename, subfolder, type } for each output.
  */
 export function extractComfyOutputFiles(
-  historyEntry: any
+  historyEntry: ComfyHistoryEntry
 ): Array<{ filename: string; subfolder: string; type: string }> {
   const files: Array<{ filename: string; subfolder: string; type: string }> = [];
 
   for (const nodeOutput of Object.values(historyEntry.outputs || {})) {
-    const outputs = (nodeOutput as any).images || (nodeOutput as any).gifs || (nodeOutput as any).audio || [];
+    const outputs = nodeOutput.images || nodeOutput.gifs || nodeOutput.audio || [];
     for (const file of outputs) {
       files.push({
         filename: file.filename,

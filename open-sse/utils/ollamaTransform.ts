@@ -1,8 +1,17 @@
 import { getCorsOrigin } from "./cors.ts";
+
+type PendingToolCall = {
+  id?: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
 // Transform OpenAI SSE stream to Ollama JSON lines format
 export function transformToOllama(response, model) {
   let buffer = "";
-  let pendingToolCalls: Record<number, any> = {};
+  let pendingToolCalls: Record<number, PendingToolCall> = {};
 
   const transform = new TransformStream({
     transform(chunk, controller) {
@@ -52,7 +61,7 @@ export function transformToOllama(response, model) {
           if (finishReason === "tool_calls" || finishReason === "stop") {
             const toolCallsArr = Object.values(pendingToolCalls);
             if (toolCallsArr.length > 0) {
-              const formattedCalls = toolCallsArr.map((tc: any) => ({
+              const formattedCalls = toolCallsArr.map((tc) => ({
                 function: {
                   name: tc.function.name,
                   arguments: JSON.parse(tc.function.arguments || "{}"),

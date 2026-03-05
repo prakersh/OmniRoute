@@ -1,15 +1,64 @@
 import { HTTP_STATUS, FETCH_TIMEOUT_MS } from "../config/constants.ts";
 
+type JsonRecord = Record<string, unknown>;
+
+type ProviderConfig = {
+  id?: string;
+  baseUrl?: string;
+  baseUrls?: string[];
+  headers?: Record<string, string>;
+};
+
+type ProviderCredentials = {
+  accessToken?: string;
+  apiKey?: string;
+  expiresAt?: string;
+  providerSpecificData?: JsonRecord;
+};
+
+type ExecutorLog = {
+  debug?: (tag: string, message: string) => void;
+  warn?: (tag: string, message: string) => void;
+};
+
+type ExecuteInput = {
+  model: string;
+  body: unknown;
+  stream: boolean;
+  credentials: ProviderCredentials;
+  signal?: AbortSignal | null;
+  log?: ExecutorLog | null;
+};
+
+function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal): AbortSignal {
+  const controller = new AbortController();
+
+  const abortBoth = () => {
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
+  };
+
+  if (primary.aborted || secondary.aborted) {
+    abortBoth();
+    return controller.signal;
+  }
+
+  primary.addEventListener("abort", abortBoth, { once: true });
+  secondary.addEventListener("abort", abortBoth, { once: true });
+  return controller.signal;
+}
+
 /**
  * BaseExecutor - Base class for provider executors.
  * Implements the Strategy pattern: subclasses override specific methods
  * (buildUrl, buildHeaders, transformRequest, etc.) for each provider.
  */
 export class BaseExecutor {
-  provider: any;
-  config: any;
+  provider: string;
+  config: ProviderConfig;
 
-  constructor(provider: any, config: any) {
+  constructor(provider: string, config: ProviderConfig) {
     this.provider = provider;
     this.config = config;
   }
@@ -26,9 +75,19 @@ export class BaseExecutor {
     return this.getBaseUrls().length || 1;
   }
 
-  buildUrl(model, stream, urlIndex = 0, credentials = null) {
+  buildUrl(
+    model: string,
+    stream: boolean,
+    urlIndex = 0,
+    credentials: ProviderCredentials | null = null
+  ) {
+    void model;
+    void stream;
     if (this.provider?.startsWith?.("openai-compatible-")) {
-      const baseUrl = credentials?.providerSpecificData?.baseUrl || "https://api.openai.com/v1";
+      const baseUrl =
+        typeof credentials?.providerSpecificData?.baseUrl === "string"
+          ? credentials.providerSpecificData.baseUrl
+          : "https://api.openai.com/v1";
       const normalized = baseUrl.replace(/\/$/, "");
       const path = this.provider.includes("responses") ? "/responses" : "/chat/completions";
       return `${normalized}${path}`;
@@ -37,8 +96,8 @@ export class BaseExecutor {
     return baseUrls[urlIndex] || baseUrls[0] || this.config.baseUrl;
   }
 
-  buildHeaders(credentials, stream = true) {
-    const headers = {
+  buildHeaders(credentials: ProviderCredentials, stream = true): Record<string, string> {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...this.config.headers,
     };
@@ -70,32 +129,42 @@ export class BaseExecutor {
   }
 
   // Override in subclass for provider-specific transformations
-  transformRequest(model, body, stream, credentials) {
+  transformRequest(
+    model: string,
+    body: unknown,
+    stream: boolean,
+    credentials: ProviderCredentials
+  ): unknown {
+    void model;
+    void stream;
+    void credentials;
     return body;
   }
 
-  shouldRetry(status, urlIndex) {
+  shouldRetry(status: number, urlIndex: number) {
     return status === HTTP_STATUS.RATE_LIMITED && urlIndex + 1 < this.getFallbackCount();
   }
 
   // Override in subclass for provider-specific refresh
-  async refreshCredentials(credentials, log) {
+  async refreshCredentials(credentials: ProviderCredentials, log: ExecutorLog | null) {
+    void credentials;
+    void log;
     return null;
   }
 
-  needsRefresh(credentials) {
+  needsRefresh(credentials: ProviderCredentials) {
     if (!credentials.expiresAt) return false;
     const expiresAtMs = new Date(credentials.expiresAt).getTime();
     return expiresAtMs - Date.now() < 5 * 60 * 1000;
   }
 
-  parseError(response, bodyText) {
+  parseError(response: Response, bodyText: string) {
     return { status: response.status, message: bodyText || `HTTP ${response.status}` };
   }
 
-  async execute({ model, body, stream, credentials, signal, log }) {
+  async execute({ model, body, stream, credentials, signal, log }: ExecuteInput) {
     const fallbackCount = this.getFallbackCount();
-    let lastError = null;
+    let lastError: unknown = null;
     let lastStatus = 0;
 
     for (let urlIndex = 0; urlIndex < fallbackCount; urlIndex++) {
@@ -109,10 +178,10 @@ export class BaseExecutor {
         const timeoutSignal = !stream ? AbortSignal.timeout(FETCH_TIMEOUT_MS) : null;
         const combinedSignal =
           signal && timeoutSignal
-            ? AbortSignal.any([signal, timeoutSignal])
+            ? mergeAbortSignals(signal, timeoutSignal)
             : signal || timeoutSignal;
 
-        const fetchOptions: Record<string, any> = {
+        const fetchOptions: RequestInit = {
           method: "POST",
           headers,
           body: JSON.stringify(transformedBody),
@@ -130,15 +199,16 @@ export class BaseExecutor {
         return { response, url, headers, transformedBody };
       } catch (error) {
         // Distinguish timeout errors from other abort errors
-        if (error.name === "TimeoutError") {
+        const err = error instanceof Error ? error : new Error(String(error));
+        if (err.name === "TimeoutError") {
           log?.warn?.("TIMEOUT", `Fetch timeout after ${FETCH_TIMEOUT_MS}ms on ${url}`);
         }
-        lastError = error;
+        lastError = err;
         if (urlIndex + 1 < fallbackCount) {
           log?.debug?.("RETRY", `Error on ${url}, trying fallback ${urlIndex + 1}`);
           continue;
         }
-        throw error;
+        throw err;
       }
     }
 

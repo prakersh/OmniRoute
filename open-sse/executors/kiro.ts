@@ -3,6 +3,32 @@ import { PROVIDERS } from "../config/constants.ts";
 import { v4 as uuidv4 } from "uuid";
 import { refreshKiroToken } from "../services/tokenRefresh.ts";
 
+type JsonRecord = Record<string, unknown>;
+
+type UsageSummary = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
+type KiroStreamState = {
+  endDetected: boolean;
+  finishEmitted: boolean;
+  hasToolCalls: boolean;
+  toolCallIndex: number;
+  seenToolIds: Map<string, number>;
+  totalContentLength?: number;
+  contextUsagePercentage?: number;
+  hasContextUsage?: boolean;
+  hasMeteringEvent?: boolean;
+  usage?: UsageSummary;
+};
+
+type EventFrame = {
+  headers: Record<string, string>;
+  payload: JsonRecord | null;
+};
+
 // ── CRC32 lookup table (IEEE polynomial, no dependency) ──
 const CRC32_TABLE = new Uint32Array(256);
 for (let i = 0; i < 256; i++) {
@@ -13,7 +39,7 @@ for (let i = 0; i < 256; i++) {
   CRC32_TABLE[i] = c >>> 0;
 }
 
-function crc32(buf) {
+function crc32(buf: Uint8Array) {
   let crc = 0xffffffff;
   for (let i = 0; i < buf.length; i++) {
     crc = CRC32_TABLE[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
@@ -30,7 +56,8 @@ export class KiroExecutor extends BaseExecutor {
     super("kiro", PROVIDERS.kiro);
   }
 
-  buildHeaders(credentials, stream = true) {
+  buildHeaders(credentials: { accessToken?: string }, stream = true) {
+    void stream;
     const headers = {
       ...this.config.headers,
       "Amz-Sdk-Request": "attempt=1; max=3",
@@ -44,14 +71,31 @@ export class KiroExecutor extends BaseExecutor {
     return headers;
   }
 
-  transformRequest(model, body, stream, credentials) {
+  transformRequest(model: string, body: unknown, stream: boolean, credentials: unknown): unknown {
+    void model;
+    void stream;
+    void credentials;
     return body;
   }
 
   /**
    * Custom execute for Kiro - handles AWS EventStream binary response
    */
-  async execute({ model, body, stream, credentials, signal, log }) {
+  async execute({
+    model,
+    body,
+    stream,
+    credentials,
+    signal,
+    log,
+  }: {
+    model: string;
+    body: unknown;
+    stream: boolean;
+    credentials: { accessToken?: string; refreshToken?: string; providerSpecificData?: unknown };
+    signal?: AbortSignal;
+    log?: { error?: (tag: string, message: string) => void } | null;
+  }) {
     const url = this.buildUrl(model, stream, 0);
     const headers = this.buildHeaders(credentials, stream);
     const transformedBody = this.transformRequest(model, body, stream, credentials);
@@ -78,12 +122,13 @@ export class KiroExecutor extends BaseExecutor {
    * Transform AWS EventStream binary response to SSE text stream
    * Using TransformStream instead of ReadableStream.pull() to avoid Workers timeout
    */
-  transformEventStreamToSSE(response, model) {
+  transformEventStreamToSSE(response: Response, model: string) {
     let buffer = new Uint8Array(0);
     let chunkIndex = 0;
     const responseId = `chatcmpl-${Date.now()}`;
     const created = Math.floor(Date.now() / 1000);
-    const state: Record<string, any> = { endDetected: false,
+    const state: KiroStreamState = {
+      endDetected: false,
       finishEmitted: false,
       hasToolCalls: false,
       toolCallIndex: 0,
@@ -125,7 +170,7 @@ export class KiroExecutor extends BaseExecutor {
             const content = event.payload.content;
             state.totalContentLength += content.length;
 
-            const chunk: Record<string, any> = {
+            const chunk: JsonRecord = {
               id: responseId,
               object: "chat.completion.chunk",
               created,
@@ -144,7 +189,7 @@ export class KiroExecutor extends BaseExecutor {
 
           // Handle codeEvent
           if (eventType === "codeEvent" && event.payload?.content) {
-            const chunk: Record<string, any> = {
+            const chunk: JsonRecord = {
               id: responseId,
               object: "chat.completion.chunk",
               created,
@@ -256,7 +301,7 @@ export class KiroExecutor extends BaseExecutor {
 
           // Handle messageStopEvent
           if (eventType === "messageStopEvent") {
-            const chunk: Record<string, any> = {
+            const chunk: JsonRecord = {
               id: responseId,
               object: "chat.completion.chunk",
               created,
@@ -329,7 +374,7 @@ export class KiroExecutor extends BaseExecutor {
               };
             }
 
-            const finishChunk: Record<string, any> = {
+            const finishChunk: JsonRecord = {
               id: responseId,
               object: "chat.completion.chunk",
               created,
@@ -398,7 +443,10 @@ export class KiroExecutor extends BaseExecutor {
     });
   }
 
-  async refreshCredentials(credentials, log) {
+  async refreshCredentials(
+    credentials: { refreshToken?: string; providerSpecificData?: unknown },
+    log?: { error?: (tag: string, message: string) => void } | null
+  ) {
     if (!credentials.refreshToken) return null;
 
     try {
@@ -411,7 +459,8 @@ export class KiroExecutor extends BaseExecutor {
 
       return result;
     } catch (error) {
-      log?.error?.("TOKEN", `Kiro refresh error: ${error.message}`);
+      const err = error instanceof Error ? error : new Error(String(error));
+      log?.error?.("TOKEN", `Kiro refresh error: ${err.message}`);
       return null;
     }
   }
@@ -420,7 +469,7 @@ export class KiroExecutor extends BaseExecutor {
 /**
  * Parse AWS EventStream frame
  */
-function parseEventFrame(data) {
+function parseEventFrame(data: Uint8Array): EventFrame | null {
   try {
     const view = new DataView(data.buffer, data.byteOffset);
     const totalLength = view.getUint32(0, false);
@@ -447,7 +496,7 @@ function parseEventFrame(data) {
       return null;
     }
     // Parse headers
-    const headers = {};
+    const headers: Record<string, string> = {};
     let offset = 12; // After prelude
     const headerEnd = 12 + headersLength;
 
@@ -480,7 +529,7 @@ function parseEventFrame(data) {
     const payloadStart = 12 + headersLength;
     const payloadEnd = data.length - 4; // Exclude message CRC
 
-    let payload = null;
+    let payload: JsonRecord | null = null;
     if (payloadEnd > payloadStart) {
       const payloadStr = new TextDecoder().decode(data.slice(payloadStart, payloadEnd));
 
@@ -492,9 +541,10 @@ function parseEventFrame(data) {
       try {
         payload = JSON.parse(payloadStr);
       } catch (parseError) {
+        const err = parseError instanceof Error ? parseError : new Error(String(parseError));
         // Log parse error for debugging
         console.warn(
-          `[Kiro] Failed to parse payload: ${parseError.message} | payload: ${payloadStr.substring(0, 100)}`
+          `[Kiro] Failed to parse payload: ${err.message} | payload: ${payloadStr.substring(0, 100)}`
         );
         payload = { raw: payloadStr };
       }
@@ -502,7 +552,8 @@ function parseEventFrame(data) {
 
     return { headers, payload };
   } catch (err) {
-    console.warn(`[Kiro] Frame parse error: ${err.message}`);
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.warn(`[Kiro] Frame parse error: ${error.message}`);
     return null;
   }
 }

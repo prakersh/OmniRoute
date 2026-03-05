@@ -1,6 +1,22 @@
 import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
 
+type AntigravityCandidate = {
+  content: {
+    role: string;
+    parts: Array<Record<string, unknown>>;
+  };
+  finishReason?: string;
+};
+
+type AntigravityUsageMetadata = {
+  promptTokenCount: number;
+  candidatesTokenCount: number;
+  totalTokenCount: number;
+  thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+};
+
 // Convert OpenAI SSE chunk to Antigravity SSE format
 // Real Antigravity format:
 //   data: {"response":{"candidates":[{"content":{"role":"model","parts":[...]}, "finishReason":"STOP"}], "usageMetadata":{...}, "modelVersion":"...", "responseId":"..."}}
@@ -81,7 +97,7 @@ export function openaiToAntigravityResponse(chunk, state) {
   }
 
   // Build candidate
-  const candidate: Record<string, any> = { content: { role: "model", parts } };
+  const candidate: AntigravityCandidate = { content: { role: "model", parts } };
 
   // Finish reason mapping
   if (finishReason) {
@@ -95,7 +111,12 @@ export function openaiToAntigravityResponse(chunk, state) {
   }
 
   // Build response
-  const response: Record<string, any> = {
+  const response: {
+    candidates: AntigravityCandidate[];
+    modelVersion: string;
+    responseId: string;
+    usageMetadata?: AntigravityUsageMetadata;
+  } = {
     candidates: [candidate],
     modelVersion: state._modelVersion,
     responseId: state._responseId,

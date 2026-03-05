@@ -19,9 +19,59 @@ import {
   cleanJSONSchemaForAntigravity,
 } from "../helpers/geminiHelper.ts";
 
+type GeminiPart = Record<string, unknown>;
+type GeminiContent = { role: string; parts: GeminiPart[] };
+
+type GeminiGenerationConfig = {
+  temperature?: unknown;
+  topP?: unknown;
+  topK?: unknown;
+  maxOutputTokens?: unknown;
+  thinkingConfig?: {
+    thinkingBudget: number;
+    include_thoughts: boolean;
+  };
+  responseMimeType?: string;
+  responseSchema?: unknown;
+};
+
+type GeminiFunctionDeclaration = {
+  name: string;
+  description: string;
+  parameters: unknown;
+};
+
+type GeminiRequest = {
+  model: string;
+  contents: GeminiContent[];
+  generationConfig: GeminiGenerationConfig;
+  safetySettings: unknown;
+  systemInstruction?: GeminiContent;
+  tools?: Array<{ functionDeclarations: GeminiFunctionDeclaration[] }>;
+};
+
+type CloudCodeEnvelope = {
+  project: string;
+  model: string;
+  userAgent: string;
+  requestId: string;
+  requestType?: string;
+  request: {
+    sessionId: string;
+    contents: GeminiContent[];
+    systemInstruction?: GeminiContent;
+    generationConfig: GeminiGenerationConfig;
+    tools?: Array<{ functionDeclarations: GeminiFunctionDeclaration[] }>;
+    safetySettings?: unknown;
+    toolConfig?: {
+      functionCallingConfig: { mode: string };
+    };
+  };
+};
+
 // Core: Convert OpenAI request to Gemini format (base for all variants)
 function openaiToGeminiBase(model, body, stream) {
-  const result: Record<string, any> = {
+  const result: GeminiRequest = {
     model: model,
     contents: [],
     generationConfig: {},
@@ -283,7 +333,7 @@ function wrapInCloudCodeEnvelope(model, geminiCLI, credentials = null, isAntigra
 
   const cleanModel = model.includes("/") ? model.split("/").pop()! : model;
 
-  const envelope: Record<string, any> = {
+  const envelope: CloudCodeEnvelope = {
     project: projectId,
     model: cleanModel,
     userAgent: isAntigravity ? "antigravity" : "gemini-cli",
@@ -302,7 +352,7 @@ function wrapInCloudCodeEnvelope(model, geminiCLI, credentials = null, isAntigra
     envelope.requestType = "agent";
 
     // Inject required default system prompt for Antigravity
-    const defaultPart: Record<string, any> = { text: ANTIGRAVITY_DEFAULT_SYSTEM };
+    const defaultPart: GeminiPart = { text: ANTIGRAVITY_DEFAULT_SYSTEM };
     if (envelope.request.systemInstruction?.parts) {
       envelope.request.systemInstruction.parts.unshift(defaultPart);
     } else {
@@ -336,7 +386,7 @@ function wrapInCloudCodeEnvelopeForClaude(model, claudeRequest, credentials = nu
 
   const cleanModel = model.includes("/") ? model.split("/").pop()! : model;
 
-  const envelope: Record<string, any> = {
+  const envelope: CloudCodeEnvelope = {
     project: projectId,
     model: cleanModel,
     userAgent: "antigravity",

@@ -12,20 +12,33 @@ function isTlsFingerprintEnabled() {
 }
 
 /** Per-request tracking of whether TLS fingerprint was used */
-const tlsFingerprintContext = new AsyncLocalStorage();
+type TlsFingerprintStore = { used: boolean };
+const tlsFingerprintContext = new AsyncLocalStorage<TlsFingerprintStore>();
+
+type FetchWithDispatcherOptions = RequestInit & { dispatcher?: unknown };
+
+type PatchState = {
+  originalFetch: typeof globalThis.fetch;
+  proxyContext: AsyncLocalStorage<unknown>;
+  isPatched: boolean;
+};
 
 const isCloud = typeof caches !== "undefined" && typeof caches === "object";
 const PATCH_STATE_KEY = Symbol.for("omniroute.proxyFetch.state");
 
-function getPatchState() {
-  if (!globalThis[PATCH_STATE_KEY]) {
-    globalThis[PATCH_STATE_KEY] = {
+function getPatchState(): PatchState {
+  const scopedGlobal = globalThis as typeof globalThis & {
+    [PATCH_STATE_KEY]?: PatchState;
+  };
+
+  if (!scopedGlobal[PATCH_STATE_KEY]) {
+    scopedGlobal[PATCH_STATE_KEY] = {
       originalFetch: globalThis.fetch,
       proxyContext: new AsyncLocalStorage(),
       isPatched: false,
     };
   }
-  return globalThis[PATCH_STATE_KEY];
+  return scopedGlobal[PATCH_STATE_KEY];
 }
 
 const patchState = getPatchState();
@@ -126,7 +139,7 @@ export async function runWithProxyContext(proxyConfig, fn) {
   });
 }
 
-async function patchedFetch(input: any, options: any = {}) {
+async function patchedFetch(input: RequestInfo | URL, options: FetchWithDispatcherOptions = {}) {
   if (options?.dispatcher) {
     return originalFetch(input, options);
   }
@@ -146,7 +159,7 @@ async function patchedFetch(input: any, options: any = {}) {
     // TLS fingerprint spoofing for direct connections (no proxy configured)
     if (isTlsFingerprintEnabled() && tlsClient.available) {
       try {
-        const store: any = tlsFingerprintContext.getStore();
+        const store = tlsFingerprintContext.getStore();
         if (store) store.used = true;
         return await tlsClient.fetch(targetUrl, options);
       } catch (error) {
@@ -154,7 +167,7 @@ async function patchedFetch(input: any, options: any = {}) {
         console.warn(
           `[ProxyFetch] TLS fingerprint failed, falling back to native fetch: ${message}`
         );
-        const store: any = tlsFingerprintContext.getStore();
+        const store = tlsFingerprintContext.getStore();
         if (store) store.used = false;
       }
     }

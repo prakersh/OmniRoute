@@ -34,7 +34,7 @@ function getTimeString() {
 
 /**
  * Add buffer tokens to usage to prevent context errors
- * @param {object} usage - Usage object (any format)
+ * @param {object} usage - Usage object (supported format)
  * @returns {object} Usage with buffer added
  */
 export function addBufferToUsage(usage) {
@@ -162,7 +162,7 @@ export function normalizeUsage(usage) {
 export function hasValidUsage(usage) {
   if (!usage || typeof usage !== "object") return false;
 
-  // Check for any known token field with value > 0
+  // Check for known token fields with value > 0
   const tokenFields = [
     "prompt_tokens",
     "completion_tokens",
@@ -183,7 +183,7 @@ export function hasValidUsage(usage) {
 }
 
 /**
- * Extract usage from any format (Claude, OpenAI, Gemini, Responses API)
+ * Extract usage from supported formats (Claude, OpenAI, Gemini, Responses API)
  */
 export function extractUsage(chunk) {
   if (!chunk || typeof chunk !== "object") return null;

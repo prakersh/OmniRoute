@@ -102,11 +102,101 @@ interface BudgetGuardState {
 
 let activeBudgetGuard: BudgetGuardState | null = null;
 
+type ResilienceProfileConfig = {
+  profiles: {
+    oauth: {
+      transientCooldown: number;
+      rateLimitCooldown: number;
+      maxBackoffLevel: number;
+      circuitBreakerThreshold: number;
+      circuitBreakerReset: number;
+    };
+    apikey: {
+      transientCooldown: number;
+      rateLimitCooldown: number;
+      maxBackoffLevel: number;
+      circuitBreakerThreshold: number;
+      circuitBreakerReset: number;
+    };
+  };
+  defaults: {
+    requestsPerMinute: number;
+    minTimeBetweenRequests: number;
+    concurrentRequests: number;
+  };
+};
+
 const RESILIENCE_PROFILES = {
-  aggressive: { circuitBreakerThreshold: 3, retryCount: 1, timeoutMs: 10000, fallbackDepth: 5 },
-  balanced: { circuitBreakerThreshold: 5, retryCount: 2, timeoutMs: 15000, fallbackDepth: 3 },
-  conservative: { circuitBreakerThreshold: 10, retryCount: 3, timeoutMs: 30000, fallbackDepth: 2 },
-} as const;
+  aggressive: {
+    profiles: {
+      oauth: {
+        transientCooldown: 3000,
+        rateLimitCooldown: 30000,
+        maxBackoffLevel: 4,
+        circuitBreakerThreshold: 2,
+        circuitBreakerReset: 30000,
+      },
+      apikey: {
+        transientCooldown: 2000,
+        rateLimitCooldown: 0,
+        maxBackoffLevel: 3,
+        circuitBreakerThreshold: 3,
+        circuitBreakerReset: 15000,
+      },
+    },
+    defaults: {
+      requestsPerMinute: 180,
+      minTimeBetweenRequests: 100,
+      concurrentRequests: 16,
+    },
+  },
+  balanced: {
+    profiles: {
+      oauth: {
+        transientCooldown: 5000,
+        rateLimitCooldown: 60000,
+        maxBackoffLevel: 8,
+        circuitBreakerThreshold: 3,
+        circuitBreakerReset: 60000,
+      },
+      apikey: {
+        transientCooldown: 3000,
+        rateLimitCooldown: 0,
+        maxBackoffLevel: 5,
+        circuitBreakerThreshold: 5,
+        circuitBreakerReset: 30000,
+      },
+    },
+    defaults: {
+      requestsPerMinute: 100,
+      minTimeBetweenRequests: 200,
+      concurrentRequests: 10,
+    },
+  },
+  conservative: {
+    profiles: {
+      oauth: {
+        transientCooldown: 8000,
+        rateLimitCooldown: 120000,
+        maxBackoffLevel: 10,
+        circuitBreakerThreshold: 8,
+        circuitBreakerReset: 120000,
+      },
+      apikey: {
+        transientCooldown: 5000,
+        rateLimitCooldown: 30000,
+        maxBackoffLevel: 8,
+        circuitBreakerThreshold: 8,
+        circuitBreakerReset: 60000,
+      },
+    },
+    defaults: {
+      requestsPerMinute: 60,
+      minTimeBetweenRequests: 350,
+      concurrentRequests: 6,
+    },
+  },
+} satisfies Record<"aggressive" | "balanced" | "conservative", ResilienceProfileConfig>;
 
 const TASK_FITNESS: Record<string, { preferred: string[]; traits: string[] }> = {
   coding: { preferred: ["claude", "deepseek", "codex"], traits: ["fast", "code-optimized"] },
@@ -258,19 +348,14 @@ export async function handleSetResilienceProfile(args: {
       };
     }
 
-    // Apply to OmniRoute via API
-    try {
-      await apiFetch("/api/resilience", {
-        method: "PUT",
-        body: JSON.stringify({
-          circuitBreakerThreshold: settings.circuitBreakerThreshold,
-          retryCount: settings.retryCount,
-          timeoutMs: settings.timeoutMs,
-        }),
-      });
-    } catch {
-      // Resilience endpoint may not exist yet — return settings anyway
-    }
+    // Apply to OmniRoute via API (contract: PATCH + { profiles, defaults })
+    await apiFetch("/api/resilience", {
+      method: "PATCH",
+      body: JSON.stringify({
+        profiles: settings.profiles,
+        defaults: settings.defaults,
+      }),
+    });
 
     const result = { applied: true, profile: args.profile, settings };
 
@@ -612,12 +697,10 @@ export async function handleGetSessionSnapshot() {
         prompt: toNumber(tokenCount.prompt, 0),
         completion: toNumber(tokenCount.completion, 0),
       },
-      topModels: byModel
-        .slice(0, 5)
-        .map((model) => ({
-          model: toString(model.model, "unknown"),
-          count: toNumber(model.requests, 0),
-        })),
+      topModels: byModel.slice(0, 5).map((model) => ({
+        model: toString(model.model, "unknown"),
+        count: toNumber(model.requests, 0),
+      })),
       topProviders: byProvider.slice(0, 5).map((provider) => ({
         provider: toString(provider.name, "unknown"),
         count: toNumber(provider.requests, 0),

@@ -9,7 +9,14 @@ import { DEFAULT_THINKING_GEMINI_SIGNATURE } from "../../config/defaultThinkingS
  * skipping the OpenAI hub intermediate step.
  */
 export function claudeToGeminiRequest(model, body, stream) {
-  const result: Record<string, any> = {
+  const result: {
+    model: string;
+    contents: Array<Record<string, unknown>>;
+    generationConfig: Record<string, unknown>;
+    safetySettings: unknown;
+    systemInstruction?: { role: string; parts: Array<{ text: string }> };
+    tools?: Array<{ functionDeclarations: Array<Record<string, unknown>> }>;
+  } = {
     model: model,
     contents: [],
     generationConfig: {},

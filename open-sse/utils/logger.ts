@@ -96,7 +96,7 @@ export function logger(tag) {
     const consoleFn = getConsoleFn(level);
 
     if (jsonFormat) {
-      const entry: Record<string, any> = {
+      const entry: Record<string, unknown> = {
         ts: new Date().toISOString(),
         level,
         tag,
@@ -132,7 +132,7 @@ export function createLogger(requestId = null) {
     const consoleFn = getConsoleFn(level);
 
     if (jsonFormat) {
-      const entry: Record<string, any> = {
+      const entry: Record<string, unknown> = {
         ts: new Date().toISOString(),
         level,
         tag,

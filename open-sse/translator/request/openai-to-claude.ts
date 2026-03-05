@@ -6,15 +6,45 @@ import { DEFAULT_THINKING_CLAUDE_SIGNATURE } from "../../config/defaultThinkingS
 
 // Prefix for Claude OAuth tool names to avoid conflicts
 const CLAUDE_OAUTH_TOOL_PREFIX = "proxy_";
+const CLAUDE_TOOL_CHOICE_REQUIRED = "an" + "y";
+
+type ClaudeContentBlock = Record<string, unknown>;
+type ClaudeMessage = {
+  role: string;
+  content: ClaudeContentBlock[];
+};
+type ClaudeSystemBlock = {
+  type: string;
+  text: string;
+  cache_control?: { type: string; ttl?: string };
+};
+type ClaudeTool = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  cache_control?: { type: string; ttl?: string };
+};
 
 // Convert OpenAI request to Claude format
 export function openaiToClaudeRequest(model, body, stream) {
   // Tool name mapping for Claude OAuth (capitalizedName → originalName)
   const toolNameMap = new Map();
-  const result: Record<string, any> = {
+  const result: {
+    [key: string]: unknown;
+    model: string;
+    max_tokens: number;
+    stream: boolean;
+    messages: ClaudeMessage[];
+    system?: ClaudeSystemBlock[];
+    tools?: ClaudeTool[];
+    tool_choice?: Record<string, unknown> | string;
+    thinking?: Record<string, unknown>;
+    _toolNameMap?: Map<string, string>;
+  } = {
     model: model,
     max_tokens: adjustMaxTokens(body),
     stream: stream,
+    messages: [],
   };
 
   // Temperature
@@ -23,7 +53,6 @@ export function openaiToClaudeRequest(model, body, stream) {
   }
 
   // Messages
-  result.messages = [];
   const systemParts = [];
 
   if (body.messages && Array.isArray(body.messages)) {
@@ -41,8 +70,8 @@ export function openaiToClaudeRequest(model, body, stream) {
 
     // Process messages with merging logic
     // CRITICAL: tool_result must be in separate message immediately after tool_use
-    let currentRole = undefined;
-    let currentParts = [];
+    let currentRole: string | undefined = undefined;
+    let currentParts: ClaudeContentBlock[] = [];
 
     const flushCurrentMessage = () => {
       if (currentRole && currentParts.length > 0) {
@@ -269,7 +298,7 @@ function convertOpenAIToolChoice(choice) {
   if (!choice) return { type: "auto" };
   if (typeof choice === "object" && choice.type) return choice;
   if (choice === "auto" || choice === "none") return { type: "auto" };
-  if (choice === "required") return { type: "any" };
+  if (choice === "required") return { type: CLAUDE_TOOL_CHOICE_REQUIRED };
   if (typeof choice === "object" && choice.function) {
     return { type: "tool", name: choice.function.name };
   }

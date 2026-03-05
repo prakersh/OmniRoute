@@ -1,4 +1,4 @@
-declare var EdgeRuntime: any;
+declare const EdgeRuntime: string | undefined;
 /**
  * CursorExecutor — Handles communication with the Cursor IDE API.
  *
@@ -121,13 +121,19 @@ function createErrorResponse(jsonError) {
   );
 }
 
+type CursorHttpResponse = {
+  status: number;
+  headers: Record<string, unknown>;
+  body: Buffer;
+};
+
 export class CursorExecutor extends BaseExecutor {
   constructor() {
     super("cursor", PROVIDERS.cursor);
   }
 
   buildUrl() {
-    return `${this.config.baseUrl}${this.config.chatPath}`;
+    return `${this.config.baseUrl}${this.config.chatPath || ""}`;
   }
 
   // Jyh cipher checksum for Cursor API authentication
@@ -217,7 +223,12 @@ export class CursorExecutor extends BaseExecutor {
     return generateCursorBody(messages, model, tools, reasoningEffort);
   }
 
-  async makeFetchRequest(url, headers, body, signal) {
+  async makeFetchRequest(
+    url: string,
+    headers: Record<string, string>,
+    body: Uint8Array,
+    signal?: AbortSignal
+  ): Promise<CursorHttpResponse> {
     const response = await fetch(url, {
       method: "POST",
       headers,
@@ -227,17 +238,22 @@ export class CursorExecutor extends BaseExecutor {
 
     return {
       status: response.status,
-      headers: Object.fromEntries((response.headers as any).entries()),
+      headers: Object.fromEntries(response.headers.entries()),
       body: Buffer.from(await response.arrayBuffer()),
     };
   }
 
-  makeHttp2Request(url, headers, body, signal) {
+  makeHttp2Request(
+    url: string,
+    headers: Record<string, string>,
+    body: Uint8Array,
+    signal?: AbortSignal
+  ): Promise<CursorHttpResponse> {
     if (!http2) {
       throw new Error("http2 module not available");
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<CursorHttpResponse>((resolve, reject) => {
       const urlObj = new URL(url);
       const client = http2.connect(`https://${urlObj.host}`);
       const chunks = [];
@@ -262,7 +278,10 @@ export class CursorExecutor extends BaseExecutor {
       req.on("end", () => {
         client.close();
         resolve({
-          status: responseHeaders[":status"],
+          status:
+            typeof responseHeaders[":status"] === "number"
+              ? responseHeaders[":status"]
+              : Number(responseHeaders[":status"] || HTTP_STATUS.SERVER_ERROR),
           headers: responseHeaders,
           body: Buffer.concat(chunks),
         });
@@ -291,7 +310,7 @@ export class CursorExecutor extends BaseExecutor {
     const transformedBody = this.transformRequest(model, body, stream, credentials);
 
     try {
-      const response: any = http2
+      const response: CursorHttpResponse = http2
         ? await this.makeHttp2Request(url, headers, transformedBody, signal)
         : await this.makeFetchRequest(url, headers, transformedBody, signal);
 
@@ -459,7 +478,8 @@ export class CursorExecutor extends BaseExecutor {
 
     console.log(`[CURSOR BUFFER] Final toolCalls count: ${toolCalls.length}`);
 
-    const message: Record<string, any> = { role: "assistant",
+    const message: Record<string, unknown> = {
+      role: "assistant",
       content: totalContent || null,
     };
 

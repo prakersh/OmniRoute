@@ -54,7 +54,6 @@ import { createProgressTransform, wantsProgress } from "../utils/progressTracker
  * @param {string} options.connectionId - Connection ID for usage tracking
  * @param {object} options.apiKeyInfo - API key metadata for usage attribution
  */
-/** @param {any} options */
 export async function handleChatCore({
   body,
   modelInfo,
@@ -135,7 +134,7 @@ export async function handleChatCore({
   // Create request logger for this session: sourceFormat_targetFormat_model
   const reqLogger = await createRequestLogger(sourceFormat, targetFormat, model);
 
-  // 0. Log client raw request (before any conversion)
+  // 0. Log client raw request (before format conversion)
   if (clientRawRequest) {
     reqLogger.logClientRawRequest(
       clientRawRequest.endpoint,
@@ -495,7 +494,7 @@ export async function handleChatCore({
       const buffered = addBufferToUsage(translatedResponse.usage);
       translatedResponse.usage = filterUsageForFormat(buffered, sourceFormat);
     } else {
-      // Fallback: estimate usage when provider didn't return any
+      // Fallback: estimate usage when provider returned no usage block
       const contentLength = JSON.stringify(
         translatedResponse?.choices?.[0]?.message?.content || ""
       ).length;

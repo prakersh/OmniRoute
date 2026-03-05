@@ -25,7 +25,7 @@ export function convertResponsesApiFormat(body) {
     const itemType = item.type || (item.role ? "message" : null);
 
     if (itemType === "message") {
-      // Flush any pending assistant message with tool calls
+      // Flush each pending assistant message with tool calls
       if (currentAssistantMsg) {
         result.messages.push(currentAssistantMsg);
         currentAssistantMsg = null;

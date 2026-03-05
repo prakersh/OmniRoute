@@ -34,7 +34,7 @@ async function getConfig() {
  * @param {string} providerId - Provider ID (e.g., "openai", "anthropic")
  * @returns {string|null} Proxy URL or null if no proxy configured
  */
-/** @returns {Promise<any>} */
+/** @returns {Promise<unknown>} */
 export async function resolveProxy(providerId) {
   const config = await getConfig();
 

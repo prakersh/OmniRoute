@@ -221,7 +221,7 @@ function sortModelsByUsage(models, comboName) {
  * @param {Object} options.log - Logger object
  * @returns {Promise<Response>}
  */
-/** @param {any} options */
+/** @param {object} options */
 export async function handleComboChat({
   body,
   combo,
@@ -263,7 +263,7 @@ export async function handleComboChat({
       // For weighted + nested, select from original models then fallback sequentially
       const selected = selectWeightedModel(models);
       orderedModels = orderModelsForWeightedFallback(models, selected);
-      // But if any were nested, they are already resolved to flat
+      // If entries were nested, they are already resolved to flat
       orderedModels = orderedModels.flatMap((m) => {
         const combos = Array.isArray(allCombos) ? allCombos : allCombos?.combos || [];
         const nested = combos.find((c) => c.name === m);

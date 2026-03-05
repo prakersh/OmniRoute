@@ -137,7 +137,13 @@ export function createErrorResult(
   message: string,
   retryAfterMs: number | null = null
 ) {
-  const result: Record<string, any> = {
+  const result: {
+    success: false;
+    status: number;
+    error: string;
+    response: Response;
+    retryAfterMs?: number;
+  } = {
     success: false,
     status: statusCode,
     error: message,
@@ -160,12 +166,15 @@ export function createErrorResult(
  * @param {string} retryAfterHuman - Human-readable retry info e.g. "reset after 30s"
  * @returns {Response}
  */
-export function unavailableResponse(statusCode, message, retryAfter?: any, retryAfterHuman?: any) {
-  const retryAfterSec = Math.max(
-    Math.ceil((new Date(retryAfter).getTime() - Date.now()) / 1000),
-    1
-  );
-  const msg = `${message} (${retryAfterHuman})`;
+export function unavailableResponse(
+  statusCode: number,
+  message: string,
+  retryAfter?: string | number | Date | null,
+  retryAfterHuman?: string
+) {
+  const retryTimeMs = retryAfter ? new Date(retryAfter).getTime() : Date.now() + 1000;
+  const retryAfterSec = Math.max(Math.ceil((retryTimeMs - Date.now()) / 1000), 1);
+  const msg = retryAfterHuman ? `${message} (${retryAfterHuman})` : message;
   return new Response(JSON.stringify({ error: { message: msg } }), {
     status: statusCode,
     headers: {

@@ -66,7 +66,12 @@ function convertMessages(messages) {
 
       // Keep tool_calls structure for assistant messages
       if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
-        const assistantMsg: Record<string, any> = { role: "assistant" };
+        const assistantMsg: {
+          role: string;
+          content?: string;
+          tool_calls?: unknown;
+          tool_results?: Array<Record<string, unknown>>;
+        } = { role: "assistant" };
         if (content) {
           assistantMsg.content = content;
         }
@@ -80,7 +85,11 @@ function convertMessages(messages) {
 
         result.push(assistantMsg);
       } else if (content || pendingToolResults.length > 0) {
-        const msgObj: Record<string, any> = { role: msg.role, content: content || "" };
+        const msgObj: {
+          role: string;
+          content: string;
+          tool_results?: Array<Record<string, unknown>>;
+        } = { role: msg.role, content: content || "" };
 
         // Attach pending tool results to this message
         if (pendingToolResults.length > 0) {

@@ -9,7 +9,7 @@ import { MCP_ESSENTIAL_TOOLS } from "../schemas/tools";
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch as any;
+vi.stubGlobal("fetch", mockFetch);
 
 describe("MCP Essential Tools", () => {
   beforeEach(() => {

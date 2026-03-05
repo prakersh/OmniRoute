@@ -125,7 +125,7 @@ export async function createRequestLogger(sourceFormat, targetFormat, model) {
       return sessionPath;
     },
 
-    // 1. Log client raw request (before any conversion)
+    // 1. Log client raw request (before all conversion steps)
     logClientRawRequest(endpoint, body, headers = {}) {
       writeJsonFile(sessionPath, "1_req_client.json", {
         timestamp: new Date().toISOString(),

@@ -276,8 +276,8 @@ async function handleSwitchCombo(args: { comboId: string; active: boolean }) {
   const start = Date.now();
   try {
     const result = await omniRouteFetch(`/api/combos/${encodeURIComponent(args.comboId)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ enabled: args.active }),
+      method: "PUT",
+      body: JSON.stringify({ isActive: args.active }),
     });
     await logToolCall("omniroute_switch_combo", args, result, Date.now() - start, true);
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };

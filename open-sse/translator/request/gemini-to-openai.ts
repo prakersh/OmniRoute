@@ -4,7 +4,15 @@ import { adjustMaxTokens } from "../helpers/maxTokensHelper.ts";
 
 // Convert Gemini request to OpenAI format
 export function geminiToOpenAIRequest(model, body, stream) {
-  const result: Record<string, any> = {
+  const result: {
+    model: string;
+    messages: Array<Record<string, unknown>>;
+    stream: boolean;
+    max_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    tools?: Array<Record<string, unknown>>;
+  } = {
     model: model,
     messages: [],
     stream: stream,
@@ -116,7 +124,11 @@ function convertGeminiContent(content) {
   }
 
   if (toolCalls.length > 0) {
-    const result: Record<string, any> = { role: "assistant" };
+    const result: {
+      role: string;
+      content?: string | Array<Record<string, unknown>>;
+      tool_calls?: Array<Record<string, unknown>>;
+    } = { role: "assistant" };
     if (parts.length > 0) {
       result.content = parts.length === 1 ? parts[0].text : parts;
     }

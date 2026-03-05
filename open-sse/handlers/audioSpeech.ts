@@ -256,7 +256,7 @@ async function handleTortoiseSpeech(providerConfig, body) {
  * @param {Object} options.credentials - Provider credentials { apiKey }
  * @returns {Response}
  */
-/** @returns {Promise<any>} */
+/** @returns {Promise<unknown>} */
 export async function handleAudioSpeech({ body, credentials }) {
   if (!body.model) {
     return errorResponse(400, "model is required");
@@ -276,7 +276,8 @@ export async function handleAudioSpeech({ body, credentials }) {
   }
 
   // Skip credential check for local providers (authType: "none")
-  const token = providerConfig.authType === "none" ? null : (credentials?.apiKey || credentials?.accessToken);
+  const token =
+    providerConfig.authType === "none" ? null : credentials?.apiKey || credentials?.accessToken;
   if (providerConfig.authType !== "none" && !token) {
     return errorResponse(401, `No credentials for speech provider: ${providerId}`);
   }
