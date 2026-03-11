@@ -29,8 +29,8 @@ export class GeminiCLIExecutor extends BaseExecutor {
       return body;
     }
 
-    if (credentials?.projectId) {
-      body.project = credentials.projectId;
+    if (credentials?.projectId && body && typeof body === "object") {
+      (body as Record<string, unknown>).project = credentials.projectId;
     }
     return body;
   }
