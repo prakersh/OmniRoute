@@ -1,0 +1,308 @@
+/**
+ * Integration Wiring Verification Tests
+ *
+ * Validates that backend modules are correctly wired into the current
+ * OmniRoute architecture (TypeScript + App Router route.ts files).
+ */
+
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, "..", "..");
+
+function readProjectFile(relPath) {
+  const full = join(ROOT, relPath);
+  if (!existsSync(full)) return null;
+  return readFileSync(full, "utf8");
+}
+
+function assertFileExists(relPath) {
+  const full = join(ROOT, relPath);
+  assert.ok(existsSync(full), `${relPath} should exist`);
+  return full;
+}
+
+function assertRouteMethods(relPath, methods) {
+  const src = readProjectFile(relPath);
+  assert.ok(src, `${relPath} should exist`);
+  for (const method of methods) {
+    assert.match(src, new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\(`));
+  }
+}
+
+// ─── Pipeline Wiring ─────────────────────────────────
+
+describe("Pipeline Wiring — server-init.ts", () => {
+  const src = readProjectFile("src/server-init.ts");
+
+  it("should initialize compliance audit log", () => {
+    assert.ok(src, "src/server-init.ts should exist");
+    assert.match(src, /initAuditLog/);
+  });
+
+  it("should cleanup expired logs", () => {
+    assert.match(src, /cleanupExpiredLogs/);
+  });
+
+  it("should enforce secrets before startup", () => {
+    assert.match(src, /enforceSecrets/);
+  });
+
+  it("should log server.start audit event", () => {
+    assert.match(src, /server\.start/);
+  });
+});
+
+describe("Pipeline Wiring — sse chat handler", () => {
+  const src = readProjectFile("src/sse/handlers/chat.ts");
+
+  it("should import and use request sanitization", () => {
+    assert.ok(src, "src/sse/handlers/chat.ts should exist");
+    assert.match(src, /sanitizeRequest/);
+  });
+
+  it("should import circuit breaker integration", () => {
+    assert.match(src, /getCircuitBreaker|CircuitBreakerOpenError/);
+  });
+
+  it("should import model availability integration", () => {
+    assert.match(src, /isModelAvailable|setModelUnavailable/);
+  });
+
+  it("should import request telemetry integration", () => {
+    assert.match(src, /RequestTelemetry|recordTelemetry/);
+  });
+
+  it("should import request id generation", () => {
+    assert.match(src, /generateRequestId/);
+  });
+
+  it("should import cost tracking integration", () => {
+    assert.match(src, /recordCost/);
+  });
+});
+
+describe("Pipeline Wiring — middleware proxy", () => {
+  const src = readProjectFile("src/proxy.ts");
+
+  it("should exist", () => {
+    assert.ok(src, "src/proxy.ts should exist");
+  });
+
+  it("should generate request id for tracing", () => {
+    assert.match(src, /generateRequestId/);
+    assert.match(src, /X-Request-Id/);
+  });
+
+  it("should enforce body size guard for API writes", () => {
+    assert.match(src, /checkBodySize|getBodySizeLimit/);
+  });
+});
+
+// ─── API Routes ──────────────────────────────────────
+
+describe("API Routes — existence check", () => {
+  const routes = [
+    "src/app/api/cache/stats/route.ts",
+    "src/app/api/models/availability/route.ts",
+    "src/app/api/telemetry/summary/route.ts",
+    "src/app/api/usage/budget/route.ts",
+    "src/app/api/usage/quota/route.ts",
+    "src/app/api/fallback/chains/route.ts",
+    "src/app/api/compliance/audit-log/route.ts",
+    "src/app/api/evals/route.ts",
+    "src/app/api/evals/[suiteId]/route.ts",
+    "src/app/api/policies/route.ts",
+  ];
+
+  for (const route of routes) {
+    it(`route file should exist: ${route}`, () => {
+      assertFileExists(route);
+    });
+  }
+});
+
+describe("API Routes — export HTTP methods", () => {
+  it("/api/cache/stats should export GET and DELETE", () => {
+    assertRouteMethods("src/app/api/cache/stats/route.ts", ["GET", "DELETE"]);
+  });
+
+  it("/api/models/availability should export GET and POST", () => {
+    assertRouteMethods("src/app/api/models/availability/route.ts", ["GET", "POST"]);
+  });
+
+  it("/api/telemetry/summary should export GET", () => {
+    assertRouteMethods("src/app/api/telemetry/summary/route.ts", ["GET"]);
+  });
+
+  it("/api/usage/budget should export GET and POST", () => {
+    assertRouteMethods("src/app/api/usage/budget/route.ts", ["GET", "POST"]);
+  });
+
+  it("/api/usage/quota should export GET", () => {
+    assertRouteMethods("src/app/api/usage/quota/route.ts", ["GET"]);
+  });
+
+  it("/api/fallback/chains should export GET, POST, DELETE", () => {
+    assertRouteMethods("src/app/api/fallback/chains/route.ts", ["GET", "POST", "DELETE"]);
+  });
+
+  it("/api/compliance/audit-log should export GET", () => {
+    assertRouteMethods("src/app/api/compliance/audit-log/route.ts", ["GET"]);
+  });
+
+  it("/api/evals should export GET and POST", () => {
+    assertRouteMethods("src/app/api/evals/route.ts", ["GET", "POST"]);
+  });
+
+  it("/api/evals/[suiteId] should export GET", () => {
+    assertRouteMethods("src/app/api/evals/[suiteId]/route.ts", ["GET"]);
+  });
+
+  it("/api/policies should export GET and POST", () => {
+    assertRouteMethods("src/app/api/policies/route.ts", ["GET", "POST"]);
+  });
+});
+
+describe("API Routes — T09 /v1 catalog consistency", () => {
+  const v1RouteSrc = readProjectFile("src/app/api/v1/route.ts");
+  const v1ModelsRouteSrc = readProjectFile("src/app/api/v1/models/route.ts");
+  const v1CatalogSrc = readProjectFile("src/app/api/v1/models/catalog.ts");
+
+  it("/api/v1 should delegate model catalog to unified builder", () => {
+    assert.ok(v1RouteSrc, "src/app/api/v1/route.ts should exist");
+    assert.match(v1RouteSrc, /getUnifiedModelsResponse/);
+    assert.match(v1RouteSrc, /from\s+["']\.\/models\/catalog["']/);
+    assert.doesNotMatch(v1RouteSrc, /const\s+models\s*=\s*\[/);
+  });
+
+  it("/api/v1/models route should only consume unified model catalog builder", () => {
+    assert.ok(v1ModelsRouteSrc, "src/app/api/v1/models/route.ts should exist");
+    assert.match(v1ModelsRouteSrc, /from\s+["']\.\/catalog["']/);
+    assert.doesNotMatch(
+      v1ModelsRouteSrc,
+      /export\s+async\s+function\s+getUnifiedModelsResponse\s*\(/
+    );
+  });
+
+  it("/api/v1/models/catalog should export unified model catalog builder", () => {
+    assert.ok(v1CatalogSrc, "src/app/api/v1/models/catalog.ts should exist");
+    assert.match(v1CatalogSrc, /export\s+async\s+function\s+getUnifiedModelsResponse\s*\(/);
+  });
+});
+
+// ─── Barrel Exports ─────────────────────────────────
+
+describe("Barrel Exports — shared/components", () => {
+  const src = readProjectFile("src/shared/components/index.tsx");
+
+  it("should export key shared UI modules", () => {
+    assert.ok(src, "src/shared/components/index.tsx should exist");
+    for (const name of [
+      "Breadcrumbs",
+      "EmptyState",
+      "NotificationToast",
+      "FilterBar",
+      "ColumnToggle",
+      "DataTable",
+    ]) {
+      assert.match(src, new RegExp(name));
+    }
+  });
+
+  it("should re-export layouts", () => {
+    assert.match(src, /export\s+\*\s+from\s+"\.\/layouts"/);
+  });
+});
+
+describe("Barrel Exports — store", () => {
+  const src = readProjectFile("src/store/index.ts");
+
+  it("should export useNotificationStore", () => {
+    assert.ok(src, "src/store/index.ts should exist");
+    assert.match(src, /useNotificationStore/);
+  });
+});
+
+describe("Barrel Exports — shared/components/layouts", () => {
+  const src = readProjectFile("src/shared/components/layouts/index.tsx");
+
+  it("should export DashboardLayout and AuthLayout", () => {
+    assert.ok(src, "src/shared/components/layouts/index.tsx should exist");
+    assert.match(src, /DashboardLayout/);
+    assert.match(src, /AuthLayout/);
+  });
+});
+
+// ─── Layout and Page Integration ────────────────────
+
+describe("DashboardLayout Integration", () => {
+  const src = readProjectFile("src/shared/components/layouts/DashboardLayout.tsx");
+
+  it("should render NotificationToast globally", () => {
+    assert.ok(src, "src/shared/components/layouts/DashboardLayout.tsx should exist");
+    assert.match(src, /NotificationToast/);
+  });
+
+  it("should include Breadcrumbs in page wrapper", () => {
+    assert.match(src, /Breadcrumbs/);
+  });
+});
+
+describe("Page Integration — usage page wiring", () => {
+  const src = readProjectFile("src/app/(dashboard)/dashboard/usage/page.tsx");
+
+  it("should wire segmented usage tabs", () => {
+    assert.ok(src, "src/app/(dashboard)/dashboard/usage/page.tsx should exist");
+    assert.match(src, /SegmentedControl/);
+    assert.match(src, /RequestLoggerV2/);
+    assert.match(src, /ProxyLogger/);
+  });
+});
+
+describe("Page Integration — settings page wiring", () => {
+  const src = readProjectFile("src/app/(dashboard)/dashboard/settings/page.tsx");
+
+  it("should include resilience and cache cards in tabs", () => {
+    assert.ok(src, "src/app/(dashboard)/dashboard/settings/page.tsx should exist");
+    assert.match(src, /ResilienceTab/);
+    assert.match(src, /CacheStatsCard/);
+  });
+});
+
+describe("Page Integration — combos page empty state", () => {
+  const src = readProjectFile("src/app/(dashboard)/dashboard/combos/page.tsx");
+
+  it("should use EmptyState when there are no combos", () => {
+    assert.ok(src, "src/app/(dashboard)/dashboard/combos/page.tsx should exist");
+    assert.match(src, /EmptyState/);
+  });
+
+  it("should use notification store for UX feedback", () => {
+    assert.match(src, /useNotificationStore/);
+  });
+
+  it("should persist usage guide visibility and allow reopening", () => {
+    assert.match(src, /COMBO_USAGE_GUIDE_STORAGE_KEY/);
+    assert.match(src, /localStorage/);
+    assert.match(src, /handleShowUsageGuide/);
+  });
+
+  it("should expose quick templates and post-create quick test CTA", () => {
+    assert.match(src, /COMBO_TEMPLATES/);
+    assert.match(src, /applyTemplate/);
+    assert.match(src, /recentlyCreatedCombo/);
+    assert.match(src, /testNow/);
+  });
+
+  it("should include cost-optimized pricing coverage UX", () => {
+    assert.match(src, /hasPricingForModel/);
+    assert.match(src, /pricingCoveragePercent/);
+    assert.match(src, /pricingCoverage/);
+    assert.match(src, /warningCostOptimizedPartialPricing/);
+  });
+});

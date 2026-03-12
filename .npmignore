@@ -1,0 +1,44 @@
+# Database files - NEVER publish
+data/
+**/data/
+**/db.json
+
+# Source code (pre-built app/ is published instead)
+src/
+open-sse/
+docs/
+tests/
+cloud/
+images/
+logs/
+scripts/
+
+# Config/dev files
+*.md
+!README.md
+.gitignore
+.git/
+.github/
+.husky/
+.vscode/
+.env*
+eslint.config.mjs
+prettier.config.mjs
+postcss.config.mjs
+next.config.mjs
+tsconfig.json
+playwright.config.ts
+next-env.d.ts
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Misc
+restart.sh
+AGENTS.md
+
+# Build artifacts (pre-built goes inside app/)
+.next/
+node_modules/

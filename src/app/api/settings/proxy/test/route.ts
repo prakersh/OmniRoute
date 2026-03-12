@@ -1,0 +1,186 @@
+import { request as undiciRequest } from "undici";
+import {
+  createProxyDispatcher,
+  isSocks5ProxyEnabled,
+  proxyConfigToUrl,
+  proxyUrlForLogs,
+} from "@omniroute/open-sse/utils/proxyDispatcher.ts";
+import { testProxySchema } from "@/shared/validation/schemas";
+import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
+
+const BASE_SUPPORTED_PROXY_TYPES = new Set(["http", "https"]);
+
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallbackMessage;
+}
+
+function getSupportedProxyTypes() {
+  if (isSocks5ProxyEnabled()) {
+    return new Set([...BASE_SUPPORTED_PROXY_TYPES, "socks5"]);
+  }
+  return BASE_SUPPORTED_PROXY_TYPES;
+}
+
+function supportedTypesMessage() {
+  return isSocks5ProxyEnabled() ? "http, https, or socks5" : "http or https";
+}
+
+/**
+ * POST /api/settings/proxy/test — test proxy connectivity
+ * Body: { proxy: { type, host, port, username?, password? } }
+ * Returns: { success, publicIp?, latencyMs?, error? }
+ */
+export async function POST(request: Request) {
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return Response.json(
+      { error: { message: "Invalid JSON body", type: "invalid_request" } },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const validation = validateBody(testProxySchema, rawBody);
+    if (isValidationFailure(validation)) {
+      return Response.json(
+        {
+          error: {
+            message: validation.error.message,
+            details: validation.error.details,
+            type: "invalid_request",
+          },
+        },
+        { status: 400 }
+      );
+    }
+    const { proxy } = validation.data;
+
+    const proxyType = String(proxy.type || "http").toLowerCase();
+    if (proxyType === "socks5" && !isSocks5ProxyEnabled()) {
+      return Response.json(
+        {
+          error: {
+            message: "SOCKS5 proxy is disabled (set ENABLE_SOCKS5_PROXY=true to enable)",
+            type: "invalid_request",
+          },
+        },
+        { status: 400 }
+      );
+    }
+    if (proxyType.startsWith("socks") && proxyType !== "socks5") {
+      return Response.json(
+        {
+          error: {
+            message: `proxy.type must be ${supportedTypesMessage()}`,
+            type: "invalid_request",
+          },
+        },
+        { status: 400 }
+      );
+    }
+    if (!getSupportedProxyTypes().has(proxyType)) {
+      return Response.json(
+        {
+          error: {
+            message: `proxy.type must be ${supportedTypesMessage()}`,
+            type: "invalid_request",
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    let proxyUrl: string;
+    try {
+      const normalizedProxyUrl = proxyConfigToUrl(
+        {
+          type: proxyType,
+          host: proxy.host,
+          port: proxy.port,
+          username: proxy.username || "",
+          password: proxy.password || "",
+        },
+        { allowSocks5: isSocks5ProxyEnabled() }
+      );
+      if (!normalizedProxyUrl) {
+        return Response.json(
+          {
+            error: {
+              message: "Invalid proxy configuration",
+              type: "invalid_request",
+            },
+          },
+          { status: 400 }
+        );
+      }
+      proxyUrl = normalizedProxyUrl;
+    } catch (proxyError) {
+      return Response.json(
+        {
+          error: {
+            message: getErrorMessage(proxyError, "Invalid proxy configuration"),
+            type: "invalid_request",
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    const publicProxyUrl = proxyUrlForLogs(proxyUrl);
+
+    const startTime = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const dispatcher = createProxyDispatcher(proxyUrl);
+
+    try {
+      const result = await undiciRequest("https://api.ipify.org?format=json", {
+        method: "GET",
+        dispatcher,
+        signal: controller.signal,
+        headersTimeout: 10000,
+        bodyTimeout: 10000,
+      });
+
+      const responseText = await result.body.text();
+      let parsed: { ip?: string };
+      try {
+        const parsedJson = JSON.parse(responseText);
+        if (parsedJson && typeof parsedJson === "object") {
+          parsed = parsedJson as { ip?: string };
+        } else {
+          parsed = { ip: String(parsedJson) };
+        }
+      } catch {
+        parsed = { ip: responseText.trim() };
+      }
+
+      return Response.json({
+        success: true,
+        publicIp: parsed.ip || null,
+        latencyMs: Date.now() - startTime,
+        proxyUrl: publicProxyUrl,
+      });
+    } catch (fetchError) {
+      return Response.json({
+        success: false,
+        error:
+          fetchError instanceof Error && fetchError.name === "AbortError"
+            ? "Connection timeout (10s)"
+            : getErrorMessage(fetchError, "Connection failed"),
+        latencyMs: Date.now() - startTime,
+        proxyUrl: publicProxyUrl,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    const message = getErrorMessage(error, "Unexpected server error");
+    return Response.json({ error: { message, type: "server_error" } }, { status: 500 });
+  }
+}

@@ -1,0 +1,990 @@
+/**
+ * Usage Fetcher - Get usage data from provider APIs
+ */
+
+import { PROVIDERS } from "../config/constants.ts";
+import { safePercentage } from "@/shared/utils/formatting";
+
+// GitHub API config
+const GITHUB_CONFIG = {
+  apiVersion: "2022-11-28",
+  userAgent: "GitHubCopilotChat/0.26.7",
+};
+
+// Antigravity API config (credentials from PROVIDERS via credential loader)
+const ANTIGRAVITY_CONFIG = {
+  quotaApiUrl: "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+  loadProjectApiUrl: "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+  tokenUrl: "https://oauth2.googleapis.com/token",
+  get clientId() {
+    return PROVIDERS.antigravity.clientId;
+  },
+  get clientSecret() {
+    return PROVIDERS.antigravity.clientSecret;
+  },
+  userAgent: "antigravity/1.11.3 Darwin/arm64",
+};
+
+// Codex (OpenAI) API config
+const CODEX_CONFIG = {
+  usageUrl: "https://chatgpt.com/backend-api/wham/usage",
+};
+
+// Claude API config
+const CLAUDE_CONFIG = {
+  oauthUsageUrl: "https://api.anthropic.com/api/oauth/usage",
+  usageUrl: "https://api.anthropic.com/v1/organizations/{org_id}/usage",
+  settingsUrl: "https://api.anthropic.com/v1/settings",
+  apiVersion: "2023-06-01",
+};
+
+// Kimi Coding API config
+const KIMI_CONFIG = {
+  baseUrl: "https://api.kimi.com/coding/v1",
+  usageUrl: "https://api.kimi.com/coding/v1/usages",
+  apiVersion: "2023-06-01",
+};
+
+type JsonRecord = Record<string, unknown>;
+type UsageQuota = {
+  used: number;
+  total: number;
+  remaining?: number;
+  remainingPercentage?: number;
+  resetAt: string | null;
+  unlimited: boolean;
+  displayName?: string;
+};
+
+function toRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getFieldValue(source: unknown, snakeKey: string, camelKey: string): unknown {
+  const obj = toRecord(source);
+  return obj[snakeKey] ?? obj[camelKey] ?? null;
+}
+
+/**
+ * Get usage data for a provider connection
+ * @param {Object} connection - Provider connection with accessToken
+ * @returns {Promise<unknown>} Usage data with quotas
+ */
+export async function getUsageForProvider(connection) {
+  const { provider, accessToken, providerSpecificData } = connection;
+
+  switch (provider) {
+    case "github":
+      return await getGitHubUsage(accessToken, providerSpecificData);
+    case "gemini-cli":
+      return await getGeminiUsage(accessToken);
+    case "antigravity":
+      return await getAntigravityUsage(accessToken, undefined);
+    case "claude":
+      return await getClaudeUsage(accessToken);
+    case "codex":
+      return await getCodexUsage(accessToken, providerSpecificData);
+    case "kiro":
+      return await getKiroUsage(accessToken, providerSpecificData);
+    case "kimi-coding":
+      return await getKimiUsage(accessToken);
+    case "qwen":
+      return await getQwenUsage(accessToken, providerSpecificData);
+    case "iflow":
+      return await getIflowUsage(accessToken);
+    default:
+      return { message: `Usage API not implemented for ${provider}` };
+  }
+}
+
+/**
+ * Parse reset date/time to ISO string
+ * Handles multiple formats: Unix timestamp (ms), ISO date string, etc.
+ */
+function parseResetTime(resetValue) {
+  if (!resetValue) return null;
+
+  try {
+    // If it's already a Date object
+    if (resetValue instanceof Date) {
+      return resetValue.toISOString();
+    }
+
+    // If it's a number (Unix timestamp in milliseconds)
+    if (typeof resetValue === "number") {
+      return new Date(resetValue).toISOString();
+    }
+
+    // If it's a string (ISO date or parseable date string)
+    if (typeof resetValue === "string") {
+      return new Date(resetValue).toISOString();
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(`Failed to parse reset time: ${resetValue}`, error);
+    return null;
+  }
+}
+
+/**
+ * GitHub Copilot Usage
+ * Uses GitHub accessToken (not copilotToken) to call copilot_internal/user API
+ */
+async function getGitHubUsage(accessToken, providerSpecificData) {
+  try {
+    if (!accessToken) {
+      throw new Error("No GitHub access token available. Please re-authorize the connection.");
+    }
+
+    // copilot_internal/user API requires GitHub OAuth token, not copilotToken
+    const response = await fetch("https://api.github.com/copilot_internal/user", {
+      headers: {
+        Authorization: `token ${accessToken}`,
+        Accept: "application/json",
+        "X-GitHub-Api-Version": GITHUB_CONFIG.apiVersion,
+        "User-Agent": GITHUB_CONFIG.userAgent,
+        "Editor-Version": "vscode/1.100.0",
+        "Editor-Plugin-Version": "copilot-chat/0.26.7",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`GitHub API error: ${error}`);
+    }
+
+    const data = await response.json();
+
+    // Handle different response formats (paid vs free)
+    if (data.quota_snapshots) {
+      // Paid plan format
+      const snapshots = data.quota_snapshots;
+      const resetAt = parseResetTime(data.quota_reset_date);
+
+      return {
+        plan: data.copilot_plan,
+        resetDate: data.quota_reset_date,
+        quotas: {
+          chat: { ...formatGitHubQuotaSnapshot(snapshots.chat), resetAt },
+          completions: { ...formatGitHubQuotaSnapshot(snapshots.completions), resetAt },
+          premium_interactions: {
+            ...formatGitHubQuotaSnapshot(snapshots.premium_interactions),
+            resetAt,
+          },
+        },
+      };
+    } else if (data.monthly_quotas || data.limited_user_quotas) {
+      // Free/limited plan format
+      const monthlyQuotas = data.monthly_quotas || {};
+      const usedQuotas = data.limited_user_quotas || {};
+      const resetAt = parseResetTime(data.limited_user_reset_date);
+
+      return {
+        plan: data.copilot_plan || data.access_type_sku,
+        resetDate: data.limited_user_reset_date,
+        quotas: {
+          chat: {
+            used: usedQuotas.chat || 0,
+            total: monthlyQuotas.chat || 0,
+            unlimited: false,
+            resetAt,
+          },
+          completions: {
+            used: usedQuotas.completions || 0,
+            total: monthlyQuotas.completions || 0,
+            unlimited: false,
+            resetAt,
+          },
+        },
+      };
+    }
+
+    return { message: "GitHub Copilot connected. Unable to parse quota data." };
+  } catch (error) {
+    throw new Error(`Failed to fetch GitHub usage: ${error.message}`);
+  }
+}
+
+function formatGitHubQuotaSnapshot(quota) {
+  if (!quota) return { used: 0, total: 0, unlimited: true };
+
+  return {
+    used: quota.entitlement - quota.remaining,
+    total: quota.entitlement,
+    remaining: quota.remaining,
+    unlimited: quota.unlimited || false,
+  };
+}
+
+/**
+ * Gemini CLI Usage (Google Cloud)
+ */
+async function getGeminiUsage(accessToken) {
+  try {
+    // Gemini CLI uses Google Cloud quotas
+    // Try to get quota info from Cloud Resource Manager
+    const response = await fetch(
+      "https://cloudresourcemanager.googleapis.com/v1/projects?filter=lifecycleState:ACTIVE",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Quota API may not be accessible, return generic message
+      return {
+        message: "Gemini CLI uses Google Cloud quotas. Check Google Cloud Console for details.",
+      };
+    }
+
+    return { message: "Gemini CLI connected. Usage tracked via Google Cloud Console." };
+  } catch (error) {
+    return { message: "Unable to fetch Gemini usage. Check Google Cloud Console." };
+  }
+}
+
+// ── Antigravity subscription info cache ──────────────────────────────────────
+// Prevents duplicate loadCodeAssist calls within the same quota cycle.
+// Key: truncated accessToken → { data, fetchedAt }
+const _antigravitySubCache = new Map();
+const ANTIGRAVITY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Map raw loadCodeAssist tier data to short display labels.
+ * Extracts tier from allowedTiers[].isDefault (same logic as providers.js postExchange).
+ * Falls back to currentTier.id → currentTier.name → "Free".
+ */
+function getAntigravityPlanLabel(subscriptionInfo) {
+  if (!subscriptionInfo || Object.keys(subscriptionInfo).length === 0) return "Free";
+
+  // 1. Extract tier from allowedTiers (primary source — same as providers.js)
+  let tierId = "";
+  if (Array.isArray(subscriptionInfo.allowedTiers)) {
+    for (const tier of subscriptionInfo.allowedTiers) {
+      if (tier.isDefault && tier.id) {
+        tierId = tier.id.trim().toUpperCase();
+        break;
+      }
+    }
+  }
+
+  // 2. Fall back to currentTier.id
+  if (!tierId) {
+    tierId = (subscriptionInfo.currentTier?.id || "").toUpperCase();
+  }
+
+  // 3. Map tier ID to display label
+  if (tierId) {
+    if (tierId.includes("ULTRA")) return "Ultra";
+    if (tierId.includes("PRO")) return "Pro";
+    if (tierId.includes("ENTERPRISE")) return "Enterprise";
+    if (tierId.includes("BUSINESS") || tierId.includes("STANDARD")) return "Business";
+    if (tierId.includes("FREE") || tierId.includes("INDIVIDUAL") || tierId.includes("LEGACY"))
+      return "Free";
+  }
+
+  // 4. Try tier name fields as last resort
+  const tierName =
+    subscriptionInfo.currentTier?.name ||
+    subscriptionInfo.currentTier?.displayName ||
+    subscriptionInfo.subscriptionType ||
+    subscriptionInfo.tier ||
+    "";
+  const upper = tierName.toUpperCase();
+
+  if (upper.includes("ULTRA")) return "Ultra";
+  if (upper.includes("PRO")) return "Pro";
+  if (upper.includes("ENTERPRISE")) return "Enterprise";
+  if (upper.includes("STANDARD") || upper.includes("BUSINESS")) return "Business";
+  if (upper.includes("INDIVIDUAL") || upper.includes("FREE")) return "Free";
+
+  // 5. If upgradeSubscriptionType exists, account is on free tier
+  if (subscriptionInfo.currentTier?.upgradeSubscriptionType) return "Free";
+
+  // 6. If we have a tier name that didn't match known patterns, return it title-cased
+  if (tierName) {
+    return tierName.charAt(0).toUpperCase() + tierName.slice(1).toLowerCase();
+  }
+
+  return "Free";
+}
+
+/**
+ * Antigravity Usage - Fetch quota from Google Cloud Code API
+ * Now calls loadCodeAssist ONCE (cached) and reuses for projectId + plan.
+ */
+async function getAntigravityUsage(accessToken, providerSpecificData) {
+  try {
+    // Single cached call for subscription info (provides both projectId and plan)
+    const subscriptionInfo = await getAntigravitySubscriptionInfoCached(accessToken);
+    const projectId = subscriptionInfo?.cloudaicompanionProject || null;
+
+    // Fetch quota data
+    const response = await fetch(ANTIGRAVITY_CONFIG.quotaApiUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": ANTIGRAVITY_CONFIG.userAgent,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(projectId ? { project: projectId } : {}),
+    });
+
+    if (response.status === 403) {
+      return { message: "Antigravity access forbidden. Check subscription." };
+    }
+
+    if (!response.ok) {
+      throw new Error(`Antigravity API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const dataObj = toRecord(data);
+    const modelEntries = toRecord(dataObj.models);
+    const quotas: Record<string, UsageQuota> = {};
+
+    // Parse model quotas (inspired by vscode-antigravity-cockpit)
+    if (Object.keys(modelEntries).length > 0) {
+      // Filter only recommended/important models (must match PROVIDER_MODELS ag ids)
+      const importantModels = [
+        "claude-opus-4-6-thinking",
+        "claude-sonnet-4-6",
+        "gemini-3.1-pro-high",
+        "gemini-3.1-pro-low",
+        "gemini-3-flash",
+        "gpt-oss-120b-medium",
+      ];
+
+      for (const [modelKey, infoValue] of Object.entries(modelEntries)) {
+        const info = toRecord(infoValue);
+        const quotaInfo = toRecord(info.quotaInfo);
+        // Skip models without quota info
+        if (Object.keys(quotaInfo).length === 0) {
+          continue;
+        }
+
+        // Skip internal models and non-important models
+        if (info.isInternal === true || !importantModels.includes(modelKey)) {
+          continue;
+        }
+
+        const remainingFraction = toNumber(quotaInfo.remainingFraction, 0);
+        const remainingPercentage = remainingFraction * 100;
+
+        // Convert percentage to used/total for UI compatibility
+        // QUOTA_NORMALIZED_BASE is an arbitrary base for converting fractions
+        // to integer used/total pairs that the dashboard UI can display as bars.
+        const QUOTA_NORMALIZED_BASE = 1000;
+        const total = QUOTA_NORMALIZED_BASE;
+        const remaining = Math.round(total * remainingFraction);
+        const used = total - remaining;
+
+        // Use modelKey as key (matches PROVIDER_MODELS id)
+        quotas[modelKey] = {
+          used,
+          total,
+          resetAt: parseResetTime(quotaInfo.resetTime),
+          remainingPercentage,
+          unlimited: false,
+          displayName: typeof info.displayName === "string" ? info.displayName : modelKey,
+        };
+      }
+    }
+
+    return {
+      plan: getAntigravityPlanLabel(subscriptionInfo),
+      quotas,
+      subscriptionInfo,
+    };
+  } catch (error) {
+    return { message: `Antigravity error: ${error.message}` };
+  }
+}
+
+/**
+ * Get Antigravity subscription info (cached, 5 min TTL)
+ * Prevents duplicate loadCodeAssist calls within the same quota cycle.
+ */
+async function getAntigravitySubscriptionInfoCached(accessToken) {
+  const cacheKey = accessToken.substring(0, 16);
+  const cached = _antigravitySubCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.fetchedAt < ANTIGRAVITY_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const data = await getAntigravitySubscriptionInfo(accessToken);
+  _antigravitySubCache.set(cacheKey, { data, fetchedAt: Date.now() });
+  return data;
+}
+
+/**
+ * Get Antigravity subscription info using correct Antigravity headers.
+ * Must match the headers used in providers.js postExchange (not CLI headers).
+ */
+async function getAntigravitySubscriptionInfo(accessToken) {
+  try {
+    const response = await fetch(ANTIGRAVITY_CONFIG.loadProjectApiUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "User-Agent": "google-api-nodejs-client/9.15.1",
+        "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+        "Client-Metadata": JSON.stringify({
+          ideType: "IDE_UNSPECIFIED",
+          platform: "PLATFORM_UNSPECIFIED",
+          pluginType: "GEMINI",
+        }),
+      },
+      body: JSON.stringify({
+        metadata: {
+          ideType: "IDE_UNSPECIFIED",
+          platform: "PLATFORM_UNSPECIFIED",
+          pluginType: "GEMINI",
+        },
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claude Usage - Try to fetch from Anthropic API
+ */
+async function getClaudeUsage(accessToken) {
+  try {
+    // Primary: Try OAuth usage endpoint (works with Claude Code consumer OAuth tokens)
+    // Requires anthropic-beta: oauth-2025-04-20 header
+    const oauthResponse = await fetch(CLAUDE_CONFIG.oauthUsageUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "anthropic-beta": "oauth-2025-04-20",
+        "anthropic-version": CLAUDE_CONFIG.apiVersion,
+      },
+    });
+
+    if (oauthResponse.ok) {
+      const data = await oauthResponse.json();
+      const quotas: Record<string, UsageQuota> = {};
+
+      // utilization = percentage USED (e.g., 90 means 90% used, 10% remaining)
+      // Confirmed via user report #299: Claude.ai shows 87% used = OmniRoute must show 13% remaining.
+      const hasUtilization = (window: JsonRecord) =>
+        window && typeof window === "object" && safePercentage(window.utilization) !== undefined;
+
+      const createQuotaObject = (window: JsonRecord) => {
+        const used = safePercentage(window.utilization) as number; // utilization = % used
+        const remaining = Math.max(0, 100 - used);
+        return {
+          used,
+          total: 100,
+          remaining,
+          resetAt: parseResetTime(window.resets_at),
+          remainingPercentage: remaining,
+          unlimited: false,
+        };
+      };
+
+      if (hasUtilization(data.five_hour)) {
+        quotas["session (5h)"] = createQuotaObject(data.five_hour);
+      }
+
+      if (hasUtilization(data.seven_day)) {
+        quotas["weekly (7d)"] = createQuotaObject(data.seven_day);
+      }
+
+      // Parse model-specific weekly windows (e.g., seven_day_sonnet, seven_day_opus)
+      for (const [key, value] of Object.entries(data)) {
+        const valueRecord = toRecord(value);
+        if (key.startsWith("seven_day_") && key !== "seven_day" && hasUtilization(valueRecord)) {
+          const modelName = key.replace("seven_day_", "");
+          quotas[`weekly ${modelName} (7d)`] = createQuotaObject(valueRecord);
+        }
+      }
+
+      return {
+        plan: "Claude Code",
+        quotas,
+        extraUsage: data.extra_usage ?? null,
+      };
+    }
+
+    // Fallback: OAuth endpoint returned non-OK, try legacy settings/org endpoint
+    console.warn(
+      `[Claude Usage] OAuth endpoint returned ${oauthResponse.status}, falling back to legacy`
+    );
+    return await getClaudeUsageLegacy(accessToken);
+  } catch (error) {
+    return { message: `Claude connected. Unable to fetch usage: ${(error as Error).message}` };
+  }
+}
+
+/**
+ * Legacy Claude usage fetcher for API key / org admin users.
+ * Uses /v1/settings + /v1/organizations/{org_id}/usage endpoints.
+ */
+async function getClaudeUsageLegacy(accessToken) {
+  try {
+    const settingsResponse = await fetch(CLAUDE_CONFIG.settingsUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "anthropic-version": CLAUDE_CONFIG.apiVersion,
+      },
+    });
+
+    if (settingsResponse.ok) {
+      const settings = await settingsResponse.json();
+
+      if (settings.organization_id) {
+        const usageResponse = await fetch(
+          CLAUDE_CONFIG.usageUrl.replace("{org_id}", settings.organization_id),
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "anthropic-version": CLAUDE_CONFIG.apiVersion,
+            },
+          }
+        );
+
+        if (usageResponse.ok) {
+          const usage = await usageResponse.json();
+          return {
+            plan: settings.plan || "Unknown",
+            organization: settings.organization_name,
+            quotas: usage,
+          };
+        }
+      }
+
+      return {
+        plan: settings.plan || "Unknown",
+        organization: settings.organization_name,
+        message: "Claude connected. Usage details require admin access.",
+      };
+    }
+
+    return { message: "Claude connected. Usage API requires admin permissions." };
+  } catch (error) {
+    return { message: `Claude connected. Unable to fetch usage: ${(error as Error).message}` };
+  }
+}
+
+/**
+ * Codex (OpenAI) Usage - Fetch from ChatGPT backend API
+ * IMPORTANT: Uses persisted workspaceId from OAuth to ensure correct workspace binding.
+ * No fallback to other workspaces - strict binding to user's selected workspace.
+ */
+async function getCodexUsage(accessToken, providerSpecificData: Record<string, unknown> = {}) {
+  try {
+    // Use persisted workspace ID from OAuth - NO FALLBACK
+    const accountId =
+      typeof providerSpecificData.workspaceId === "string"
+        ? providerSpecificData.workspaceId
+        : null;
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (accountId) {
+      headers["chatgpt-account-id"] = accountId;
+    }
+
+    const response = await fetch(CODEX_CONFIG.usageUrl, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Codex API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Parse rate limit info (supports both snake_case and camelCase)
+    const rateLimit = toRecord(getFieldValue(data, "rate_limit", "rateLimit"));
+    const primaryWindow = toRecord(getFieldValue(rateLimit, "primary_window", "primaryWindow"));
+    const secondaryWindow = toRecord(
+      getFieldValue(rateLimit, "secondary_window", "secondaryWindow")
+    );
+
+    // Parse reset times (reset_at is Unix timestamp in seconds)
+    const parseWindowReset = (window: unknown) => {
+      const resetAt = toNumber(getFieldValue(window, "reset_at", "resetAt"), 0);
+      const resetAfterSeconds = toNumber(
+        getFieldValue(window, "reset_after_seconds", "resetAfterSeconds"),
+        0
+      );
+      if (resetAt > 0) return parseResetTime(resetAt * 1000);
+      if (resetAfterSeconds > 0) return parseResetTime(Date.now() + resetAfterSeconds * 1000);
+      return null;
+    };
+
+    // Build quota windows
+    const quotas: Record<string, UsageQuota> = {};
+
+    // Primary window (5-hour)
+    if (Object.keys(primaryWindow).length > 0) {
+      const usedPercent = toNumber(getFieldValue(primaryWindow, "used_percent", "usedPercent"), 0);
+      quotas.session = {
+        used: usedPercent,
+        total: 100,
+        remaining: 100 - usedPercent,
+        resetAt: parseWindowReset(primaryWindow),
+        unlimited: false,
+      };
+    }
+
+    // Secondary window (weekly)
+    if (Object.keys(secondaryWindow).length > 0) {
+      const usedPercent = toNumber(
+        getFieldValue(secondaryWindow, "used_percent", "usedPercent"),
+        0
+      );
+      quotas.weekly = {
+        used: usedPercent,
+        total: 100,
+        remaining: 100 - usedPercent,
+        resetAt: parseWindowReset(secondaryWindow),
+        unlimited: false,
+      };
+    }
+
+    // Code review rate limit (3rd window — differs per plan: Plus/Pro/Team)
+    const codeReviewRateLimit = toRecord(
+      getFieldValue(data, "code_review_rate_limit", "codeReviewRateLimit")
+    );
+    const codeReviewWindow = toRecord(
+      getFieldValue(codeReviewRateLimit, "primary_window", "primaryWindow")
+    );
+
+    // Only include code review quota if the API returned data for it
+    const codeReviewUsedRaw = getFieldValue(codeReviewWindow, "used_percent", "usedPercent");
+    const codeReviewRemainingRaw = getFieldValue(
+      codeReviewWindow,
+      "remaining_count",
+      "remainingCount"
+    );
+    if (codeReviewUsedRaw !== null || codeReviewRemainingRaw !== null) {
+      const codeReviewUsedPercent = toNumber(codeReviewUsedRaw, 0);
+      quotas.code_review = {
+        used: codeReviewUsedPercent,
+        total: 100,
+        remaining: 100 - codeReviewUsedPercent,
+        resetAt: parseWindowReset(codeReviewWindow),
+        unlimited: false,
+      };
+    }
+
+    return {
+      plan: String(getFieldValue(data, "plan_type", "planType") || "unknown"),
+      limitReached: Boolean(getFieldValue(rateLimit, "limit_reached", "limitReached")),
+      quotas,
+    };
+  } catch (error) {
+    throw new Error(`Failed to fetch Codex usage: ${error.message}`);
+  }
+}
+
+/**
+ * Kiro (AWS CodeWhisperer) Usage
+ */
+async function getKiroUsage(accessToken, providerSpecificData) {
+  try {
+    const profileArn = providerSpecificData?.profileArn;
+    if (!profileArn) {
+      return { message: "Kiro connected. Profile ARN not available for quota tracking." };
+    }
+
+    // Kiro uses AWS CodeWhisperer GetUsageLimits API
+    const payload = {
+      origin: "AI_EDITOR",
+      profileArn: profileArn,
+      resourceType: "AGENTIC_REQUEST",
+    };
+
+    const response = await fetch("https://codewhisperer.us-east-1.amazonaws.com", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/x-amz-json-1.0",
+        "x-amz-target": "AmazonCodeWhispererService.GetUsageLimits",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Kiro API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Parse usage data from usageBreakdownList
+    const usageList = data.usageBreakdownList || [];
+    const quotaInfo = {};
+
+    // Parse reset time - supports multiple formats (nextDateReset, resetDate, etc.)
+    const resetAt = parseResetTime(data.nextDateReset || data.resetDate);
+
+    usageList.forEach((breakdown) => {
+      const resourceType = breakdown.resourceType?.toLowerCase() || "unknown";
+      const used = breakdown.currentUsageWithPrecision || 0;
+      const total = breakdown.usageLimitWithPrecision || 0;
+
+      quotaInfo[resourceType] = {
+        used,
+        total,
+        remaining: total - used,
+        resetAt,
+        unlimited: false,
+      };
+
+      // Add free trial if available
+      if (breakdown.freeTrialInfo) {
+        const freeUsed = breakdown.freeTrialInfo.currentUsageWithPrecision || 0;
+        const freeTotal = breakdown.freeTrialInfo.usageLimitWithPrecision || 0;
+
+        quotaInfo[`${resourceType}_freetrial`] = {
+          used: freeUsed,
+          total: freeTotal,
+          remaining: freeTotal - freeUsed,
+          resetAt,
+          unlimited: false,
+        };
+      }
+    });
+
+    return {
+      plan: data.subscriptionInfo?.subscriptionTitle || "Kiro",
+      quotas: quotaInfo,
+    };
+  } catch (error) {
+    throw new Error(`Failed to fetch Kiro usage: ${error.message}`);
+  }
+}
+
+/**
+ * Map Kimi membership level to display name
+ * LEVEL_BASIC = Moderato, LEVEL_INTERMEDIATE = Allegretto,
+ * LEVEL_ADVANCED = Allegro, LEVEL_STANDARD = Vivace
+ */
+function getKimiPlanName(level) {
+  if (!level) return "";
+
+  const levelMap = {
+    LEVEL_BASIC: "Moderato",
+    LEVEL_INTERMEDIATE: "Allegretto",
+    LEVEL_ADVANCED: "Allegro",
+    LEVEL_STANDARD: "Vivace",
+  };
+
+  return levelMap[level] || level.replace("LEVEL_", "").toLowerCase();
+}
+
+/**
+ * Kimi Coding Usage - Fetch quota from Kimi API
+ * Uses the official /v1/usages endpoint with custom X-Msh-* headers
+ */
+async function getKimiUsage(accessToken) {
+  // Generate device info for headers (same as OAuth flow)
+  const deviceId = "kimi-usage-" + Date.now();
+  const platform = "omniroute";
+  const version = "2.1.2";
+  const deviceModel =
+    typeof process !== "undefined" ? `${process.platform} ${process.arch}` : "unknown";
+
+  try {
+    const response = await fetch(KIMI_CONFIG.usageUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Msh-Platform": platform,
+        "X-Msh-Version": version,
+        "X-Msh-Device-Model": deviceModel,
+        "X-Msh-Device-Id": deviceId,
+      },
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      return {
+        plan: "Kimi Coding",
+        message: `Kimi Coding connected. API Error ${response.status}: ${responseText.slice(0, 100)}`,
+      };
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return {
+        plan: "Kimi Coding",
+        message: "Kimi Coding connected. Invalid JSON response from API.",
+      };
+    }
+
+    const quotas: Record<string, UsageQuota> = {};
+    const dataObj = toRecord(data);
+
+    // Parse Kimi usage response format
+    // Format: { user: {...}, usage: { limit: "100", used: "92", remaining: "8", resetTime: "..." }, limits: [...] }
+    const usageObj = toRecord(dataObj.usage);
+
+    // Check for Kimi's actual usage fields (strings, not numbers)
+    const usageLimit = toNumber(usageObj.limit || usageObj.Limit, 0);
+    const usageUsed = toNumber(usageObj.used || usageObj.Used, 0);
+    const usageRemaining = toNumber(usageObj.remaining || usageObj.Remaining, 0);
+    const usageResetTime =
+      usageObj.resetTime || usageObj.ResetTime || usageObj.reset_at || usageObj.resetAt;
+
+    if (usageLimit > 0) {
+      const percentRemaining = usageLimit > 0 ? (usageRemaining / usageLimit) * 100 : 0;
+
+      quotas["Weekly"] = {
+        used: usageUsed,
+        total: usageLimit,
+        remaining: usageRemaining,
+        remainingPercentage: percentRemaining,
+        resetAt: parseResetTime(usageResetTime),
+        unlimited: false,
+      };
+    }
+
+    // Also parse limits array for rate limits
+    const limitsArray = Array.isArray(dataObj.limits) ? dataObj.limits : [];
+    for (let i = 0; i < limitsArray.length; i++) {
+      const limitItem = toRecord(limitsArray[i]);
+      const window = toRecord(limitItem.window);
+      const detail = toRecord(limitItem.detail);
+
+      const limit = toNumber(detail.limit || detail.Limit, 0);
+      const remaining = toNumber(detail.remaining || detail.Remaining, 0);
+      const resetTime = detail.resetTime || detail.reset_at || detail.resetAt;
+
+      if (limit > 0) {
+        quotas["Ratelimit"] = {
+          used: limit - remaining,
+          total: limit,
+          remaining,
+          remainingPercentage: limit > 0 ? (remaining / limit) * 100 : 0,
+          resetAt: parseResetTime(resetTime),
+          unlimited: false,
+        };
+      }
+    }
+
+    // Check for quota windows (Claude-like format with utilization) as fallback
+    const hasUtilization = (window: JsonRecord) =>
+      window && typeof window === "object" && safePercentage(window.utilization) !== undefined;
+
+    const createQuotaObject = (window: JsonRecord) => {
+      const remaining = safePercentage(window.utilization) as number;
+      const used = 100 - remaining;
+      return {
+        used,
+        total: 100,
+        remaining,
+        resetAt: parseResetTime(window.resets_at),
+        remainingPercentage: remaining,
+        unlimited: false,
+      };
+    };
+
+    if (hasUtilization(toRecord(dataObj.five_hour))) {
+      quotas["session (5h)"] = createQuotaObject(toRecord(dataObj.five_hour));
+    }
+
+    if (hasUtilization(toRecord(dataObj.seven_day))) {
+      quotas["weekly (7d)"] = createQuotaObject(toRecord(dataObj.seven_day));
+    }
+
+    // Check for model-specific quotas
+    for (const [key, value] of Object.entries(dataObj)) {
+      const valueRecord = toRecord(value);
+      if (key.startsWith("seven_day_") && key !== "seven_day" && hasUtilization(valueRecord)) {
+        const modelName = key.replace("seven_day_", "");
+        quotas[`weekly ${modelName} (7d)`] = createQuotaObject(valueRecord);
+      }
+    }
+
+    if (Object.keys(quotas).length > 0) {
+      const userRecord = toRecord(dataObj.user);
+      const membershipLevel = toRecord(userRecord.membership).level;
+      const planName = getKimiPlanName(membershipLevel);
+      return {
+        plan: planName || "Kimi Coding",
+        quotas,
+      };
+    }
+
+    // No quota data in response
+    const userRecord = toRecord(dataObj.user);
+    const membershipLevel = toRecord(userRecord.membership).level;
+    const planName = getKimiPlanName(membershipLevel);
+    return {
+      plan: planName || "Kimi Coding",
+      message: "Kimi Coding connected. Usage tracked per request.",
+    };
+  } catch (error) {
+    return {
+      message: `Kimi Coding connected. Unable to fetch usage: ${(error as Error).message}`,
+    };
+  }
+}
+
+/**
+ * Qwen Usage
+ */
+async function getQwenUsage(accessToken, providerSpecificData) {
+  try {
+    const resourceUrl = providerSpecificData?.resourceUrl;
+    if (!resourceUrl) {
+      return { message: "Qwen connected. No resource URL available." };
+    }
+
+    // Qwen may have usage endpoint at resource URL
+    return { message: "Qwen connected. Usage tracked per request." };
+  } catch (error) {
+    return { message: "Unable to fetch Qwen usage." };
+  }
+}
+
+/**
+ * iFlow Usage
+ */
+async function getIflowUsage(accessToken) {
+  try {
+    // iFlow may have usage endpoint
+    return { message: "iFlow connected. Usage tracked per request." };
+  } catch (error) {
+    return { message: "Unable to fetch iFlow usage." };
+  }
+}

@@ -1,0 +1,51 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: NPM_TOKEN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies (skip scripts to avoid heavy build)
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Sync version from release tag
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          # Remove 'v' prefix if present (v2.1.0 -> 2.1.0)
+          VERSION="${VERSION#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "Publishing version: $VERSION"
+
+      - name: Build CLI bundle (standalone app)
+        env:
+          JWT_SECRET: ci-build-secret-with-sufficient-length-for-validation
+        run: node scripts/prepublish.mjs
+
+      - name: Publish to npm
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          # Check if this version is already published — skip instead of failing with E403
+          if npm view "omniroute@${VERSION}" version --silent 2>/dev/null | grep -q "^${VERSION}$"; then
+            echo "️⚠️ Version ${VERSION} is already published on npm — skipping."
+            exit 0
+          fi
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
