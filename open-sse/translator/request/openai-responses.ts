@@ -23,6 +23,11 @@ function toString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function normalizeToolName(value: unknown): string {
+  const name = toString(value).trim();
+  return name.length > 0 ? name : "placeholder_tool";
+}
+
 function unsupportedFeature(message: string): Error & { statusCode: number; errorType: string } {
   const error = new Error(message) as Error & { statusCode: number; errorType: string };
   error.statusCode = 400;
@@ -136,7 +141,7 @@ export function openaiResponsesToOpenAIRequest(
         id: toString(item.call_id),
         type: "function",
         function: {
-          name: toString(item.name),
+          name: normalizeToolName(item.name),
           arguments: item.arguments,
         },
       });
@@ -192,7 +197,7 @@ export function openaiResponsesToOpenAIRequest(
       return {
         type: "function",
         function: {
-          name: toString(tool.name),
+          name: normalizeToolName(tool.name),
           description: toString(tool.description),
           parameters: tool.parameters,
           strict: tool.strict,
@@ -322,7 +327,7 @@ export function openaiToOpenAIResponsesRequest(
           input.push({
             type: "function_call",
             call_id: toString(toolCall.id),
-            name: toString(fn.name),
+            name: normalizeToolName(fn.name),
             arguments: toString(fn.arguments, "{}"),
           });
         }
@@ -352,7 +357,7 @@ export function openaiToOpenAIResponsesRequest(
         const fn = toRecord(tool.function);
         return {
           type: "function",
-          name: toString(fn.name),
+          name: normalizeToolName(fn.name),
           description: toString(fn.description),
           parameters: fn.parameters,
           strict: fn.strict,

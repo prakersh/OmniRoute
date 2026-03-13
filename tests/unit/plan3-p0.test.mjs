@@ -166,6 +166,78 @@ test("translateRequest normalizes openai-responses input string into list payloa
   assert.equal(translated.input[0].content[0].text, "hello from responses");
 });
 
+test("translateRequest OpenAI->Responses normalizes empty tool names", () => {
+  const translated = translateRequest(
+    FORMATS.OPENAI,
+    FORMATS.OPENAI_RESPONSES,
+    "gpt-5.3-codex-xhigh",
+    {
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "ok" },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "",
+            description: "desc",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ],
+    },
+    false
+  );
+
+  assert.equal(translated.input[0].type, "function_call");
+  assert.equal(translated.input[0].name, "placeholder_tool");
+  assert.equal(translated.input[1].type, "function_call_output");
+  assert.equal(translated.input[1].call_id, "call_1");
+  assert.equal(translated.tools[0].name, "placeholder_tool");
+});
+
+test("translateRequest OpenAI->Claude keeps tool_use/tool_result linkage with empty names", () => {
+  const translated = translateRequest(
+    FORMATS.OPENAI,
+    FORMATS.CLAUDE,
+    "claude-sonnet-4-5-20251001",
+    {
+      messages: [
+        {
+          role: "assistant",
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: "call_1", content: "ok" },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "",
+            description: "desc",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ],
+    },
+    true
+  );
+
+  const allBlocks = translated.messages.flatMap((m) => m.content || []);
+  const toolUseBlock = allBlocks.find((b) => b.type === "tool_use");
+  const toolResultBlock = allBlocks.find((b) => b.type === "tool_result");
+
+  assert.ok(toolUseBlock);
+  assert.ok(toolResultBlock);
+  assert.equal(toolResultBlock.tool_use_id, "call_1");
+  assert.match(String(toolUseBlock.name), /placeholder_tool/);
+  assert.match(String(translated.tools[0].name), /placeholder_tool/);
+});
+
 test("parseSSEToResponsesOutput parses completed response from SSE payload", () => {
   const rawSSE = [
     "event: response.created",

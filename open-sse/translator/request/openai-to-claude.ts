@@ -8,6 +8,7 @@ import { DEFAULT_THINKING_CLAUDE_SIGNATURE } from "../../config/defaultThinkingS
 // Can be disabled per-request via body._disableToolPrefix = true
 export const CLAUDE_OAUTH_TOOL_PREFIX = "proxy_";
 const CLAUDE_TOOL_CHOICE_REQUIRED = "an" + "y";
+const PLACEHOLDER_TOOL_NAME = "placeholder_tool";
 
 type ClaudeContentBlock = Record<string, unknown>;
 type ClaudeMessage = {
@@ -26,6 +27,10 @@ type ClaudeTool = {
   cache_control?: { type: string; ttl?: string };
   defer_loading?: boolean;
 };
+
+function normalizeToolName(name: unknown): string {
+  return typeof name === "string" && name.trim().length > 0 ? name.trim() : PLACEHOLDER_TOOL_NAME;
+}
 
 // Convert OpenAI request to Claude format
 export function openaiToClaudeRequest(model, body, stream) {
@@ -157,7 +162,7 @@ export function openaiToClaudeRequest(model, body, stream) {
   if (body.tools && Array.isArray(body.tools)) {
     result.tools = body.tools.map((tool) => {
       const toolData = tool.type === "function" && tool.function ? tool.function : tool;
-      const originalName = toolData.name;
+      const originalName = normalizeToolName(toolData.name);
 
       // Claude OAuth requires prefixed tool names to avoid conflicts
       // When prefix is disabled (non-Claude backends), use original name
@@ -175,9 +180,6 @@ export function openaiToClaudeRequest(model, body, stream) {
           toolData.input_schema || { type: "object", properties: {}, required: [] },
       };
     });
-
-    // Filter out tools with empty names (would cause Claude 400 error)
-    result.tools = result.tools.filter((tool) => tool.name && tool.name?.trim());
 
     // Add cache_control to last tool that doesn't have defer_loading
     // Tools with defer_loading=true cannot have cache_control (API rejects it)
@@ -292,10 +294,12 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map(), disableToolPr
           });
         } else if (part.type === "tool_use") {
           // Tool name already has prefix from tool declarations, keep as-is
-          // CRITICAL: Skip tool_use blocks with empty name (causes Claude 400 error)
-          if (part.name && part.name.trim()) {
-            blocks.push({ type: "tool_use", id: part.id, name: part.name, input: part.input });
-          }
+          const fallbackName = disableToolPrefix
+            ? PLACEHOLDER_TOOL_NAME
+            : CLAUDE_OAUTH_TOOL_PREFIX + PLACEHOLDER_TOOL_NAME;
+          const name =
+            typeof part.name === "string" && part.name.trim().length > 0 ? part.name : fallbackName;
+          blocks.push({ type: "tool_use", id: part.id, name, input: part.input });
         }
       }
     } else if (msg.content) {
@@ -308,9 +312,7 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map(), disableToolPr
     if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         if (tc.type === "function") {
-          // CRITICAL: Skip tool_calls with empty function name (causes Claude 400 error)
-          const fnName = tc.function?.name;
-          if (!fnName || !fnName.trim()) continue;
+          const fnName = normalizeToolName(tc.function?.name);
 
           // Apply prefix to tool name (skip if disabled)
           const toolName = disableToolPrefix ? fnName : CLAUDE_OAUTH_TOOL_PREFIX + fnName;
