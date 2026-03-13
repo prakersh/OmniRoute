@@ -164,7 +164,7 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
         return false;
       }
 
-      const creds = await getProviderCredentials(provider);
+      const creds = await getProviderCredentials(provider, null, modelInfo.model || modelString);
       if (!creds || creds.allRateLimited) return false;
       return true;
     };
@@ -248,7 +248,7 @@ async function handleSingleModelChat(
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionId);
+    const credentials = await getProviderCredentials(provider, excludeConnectionId, model);
 
     if (!credentials || credentials.allRateLimited) {
       if (lastStatus === 429 || lastStatus === 503) {
@@ -329,7 +329,8 @@ async function handleSingleModelChat(
       credentials.connectionId,
       result.status,
       result.error,
-      provider
+      provider,
+      model
     );
 
     if (shouldFallback) {

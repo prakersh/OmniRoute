@@ -14,7 +14,7 @@ import { createRequestLogger } from "../utils/requestLogger.ts";
 import { getModelTargetFormat, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.ts";
 import { resolveModelAlias } from "../services/modelDeprecation.ts";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.ts";
-import { HTTP_STATUS } from "../config/constants.ts";
+import { HTTP_STATUS, STREAM_FIRST_CHUNK_TIMEOUT_MS } from "../config/constants.ts";
 import { handleBypassRequest } from "../utils/bypassHandler.ts";
 import {
   saveRequestUsage,
@@ -41,6 +41,84 @@ import {
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from "@/lib/idempotencyLayer";
 import { createProgressTransform, wantsProgress } from "../utils/progressTracker.ts";
 import { isModelUnavailableError, getNextFamilyFallback } from "../services/modelFamilyFallback.ts";
+
+export async function ensureFirstStreamChunk(
+  response: Response,
+  timeoutMs: number,
+  provider: string,
+  model: string,
+  log?: {
+    warn?: (tag: string, msg: string) => void;
+    debug?: (tag: string, msg: string) => void;
+  } | null
+): Promise<Response> {
+  if (!response?.body || timeoutMs <= 0) return response;
+
+  const reader = response.body.getReader();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  try {
+    const firstReadPromise = reader.read();
+    const timeoutPromise = new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        resolve({ done: true, value: undefined } as ReadableStreamReadResult<Uint8Array>);
+      }, timeoutMs);
+    });
+
+    const first = await Promise.race([firstReadPromise, timeoutPromise]);
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+
+    if (timedOut || first.done) {
+      await reader.cancel("no-first-stream-chunk").catch(() => {});
+      const err = new Error(
+        `No stream data received from ${provider}/${model} within ${timeoutMs}ms`
+      );
+      err.name = "StreamFirstChunkTimeout";
+      throw err;
+    }
+
+    const firstChunk = first.value;
+    const wrapped = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(firstChunk);
+        const pump = () =>
+          reader
+            .read()
+            .then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(value);
+              return pump();
+            })
+            .catch((error) => controller.error(error));
+        void pump();
+      },
+      cancel(reason) {
+        return reader.cancel(reason).catch(() => {});
+      },
+    });
+
+    return new Response(wrapped, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch (error) {
+    if (timer) clearTimeout(timer);
+    log?.warn?.(
+      "STREAM",
+      `${provider.toUpperCase()} | ${model} | first chunk timeout/failure: ${error?.message || error}`
+    );
+    throw error;
+  }
+}
 
 /**
  * Core chat handler - shared between SSE and Worker
@@ -326,6 +404,15 @@ export async function handleChatCore({
       apiKeyName: apiKeyInfo?.name || null,
       noLog: apiKeyInfo?.noLog === true,
     }).catch(() => {});
+    const queueCode =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code || "")
+        : "";
+    if (queueCode === "RATE_LIMIT_QUEUE_TIMEOUT" || queueCode === "RATE_LIMIT_QUEUE_OVERFLOW") {
+      const queueMsg = formatProviderError(error, provider, model, HTTP_STATUS.SERVICE_UNAVAILABLE);
+      console.log(`${COLORS.yellow}[WARN] ${queueMsg}${COLORS.reset}`);
+      return createErrorResult(HTTP_STATUS.SERVICE_UNAVAILABLE, queueMsg);
+    }
     if (error.name === "AbortError") {
       streamController.handleError(error);
       return createErrorResult(499, "Request aborted");
@@ -617,6 +704,50 @@ export async function handleChatCore({
   }
 
   // Streaming response
+
+  // For combo fallback correctness, require that upstream stream actually starts.
+  // A plain 200 without any SSE data should be treated as failure so combo can try next model.
+  try {
+    providerResponse = await ensureFirstStreamChunk(
+      providerResponse,
+      STREAM_FIRST_CHUNK_TIMEOUT_MS,
+      provider,
+      model,
+      log
+    );
+  } catch (error) {
+    trackPendingRequest(model, provider, connectionId, false);
+    appendRequestLog({
+      model,
+      provider,
+      connectionId,
+      status: `FAILED ${HTTP_STATUS.GATEWAY_TIMEOUT}`,
+    }).catch(() => {});
+    saveCallLog({
+      method: "POST",
+      path: clientRawRequest?.endpoint || "/v1/chat/completions",
+      status: HTTP_STATUS.GATEWAY_TIMEOUT,
+      model,
+      provider,
+      connectionId,
+      duration: Date.now() - startTime,
+      requestBody: body,
+      error:
+        error?.message ||
+        `No stream data received within ${STREAM_FIRST_CHUNK_TIMEOUT_MS}ms from ${provider}/${model}`,
+      sourceFormat,
+      targetFormat,
+      comboName,
+      apiKeyId: apiKeyInfo?.id || null,
+      apiKeyName: apiKeyInfo?.name || null,
+      noLog: apiKeyInfo?.noLog === true,
+    }).catch(() => {});
+    return createErrorResult(
+      HTTP_STATUS.GATEWAY_TIMEOUT,
+      error?.message ||
+        `No stream data received within ${STREAM_FIRST_CHUNK_TIMEOUT_MS}ms from ${provider}/${model}`
+    );
+  }
 
   // Notify success - caller can clear error status if needed
   if (onRequestSuccess) {

@@ -60,9 +60,13 @@ const PERSIST_DEBOUNCE_MS = 60_000; // Debounce persistence to every 60s max
 let initialized = false;
 
 // Max time (ms) a job can wait in queue before failing with a timeout error.
-// Prevents infinite queuing when all providers are exhausted after a 429.
-// Configurable via RATE_LIMIT_MAX_WAIT_MS env var (default: 2 minutes).
-const MAX_WAIT_MS = parseInt(process.env.RATE_LIMIT_MAX_WAIT_MS || "120000", 10);
+// Keep this short so fallback chains can move quickly instead of "stuck thinking".
+// Configurable via RATE_LIMIT_MAX_WAIT_MS env var (default: 3 seconds).
+const MAX_WAIT_MS = parseInt(process.env.RATE_LIMIT_MAX_WAIT_MS || "3000", 10);
+
+// Max number of queued jobs per limiter before we fail fast.
+// Small by default to keep fallback responsive under sustained provider throttling.
+const MAX_QUEUE_SIZE = parseInt(process.env.RATE_LIMIT_MAX_QUEUE || "6", 10);
 
 // Default conservative settings (before we learn from headers)
 const DEFAULT_SETTINGS = {
@@ -71,6 +75,8 @@ const DEFAULT_SETTINGS = {
   reservoir: null, // No initial reservoir — unlimited until we learn
   reservoirRefreshAmount: null,
   reservoirRefreshInterval: null,
+  highWater: MAX_QUEUE_SIZE > 0 ? MAX_QUEUE_SIZE : null,
+  strategy: Bottleneck.strategy.OVERFLOW,
   maxWait: MAX_WAIT_MS, // Fail-fast: don't queue forever on 429 exhaustion
 };
 
@@ -117,6 +123,8 @@ export async function initializeRateLimits() {
               reservoir: rpm,
               reservoirRefreshAmount: rpm,
               reservoirRefreshInterval: 60 * 1000,
+              highWater: MAX_QUEUE_SIZE > 0 ? MAX_QUEUE_SIZE : null,
+              strategy: Bottleneck.strategy.OVERFLOW,
               maxWait: MAX_WAIT_MS,
               id: key,
             })
@@ -142,6 +150,8 @@ export async function initializeRateLimits() {
               reservoir: DEFAULT_API_LIMITS.requestsPerMinute,
               reservoirRefreshAmount: DEFAULT_API_LIMITS.requestsPerMinute,
               reservoirRefreshInterval: 60 * 1000, // Refresh every minute
+              highWater: MAX_QUEUE_SIZE > 0 ? MAX_QUEUE_SIZE : null,
+              strategy: Bottleneck.strategy.OVERFLOW,
               maxWait: MAX_WAIT_MS,
               id: key,
             })
@@ -220,6 +230,32 @@ function getLimiter(provider, connectionId, model = null) {
   return limiters.get(key);
 }
 
+function buildQueueError(
+  code: string,
+  key: string,
+  waitMs: number,
+  queued: number,
+  running: number
+) {
+  const kind = code === "RATE_LIMIT_QUEUE_OVERFLOW" ? "overflow" : "timeout";
+  const err = new Error(
+    `Rate limit queue ${kind} for ${key} (queued=${queued}, running=${running}, waitMs=${waitMs})`
+  ) as Error & {
+    code?: string;
+    providerKey?: string;
+    queued?: number;
+    running?: number;
+    waitMs?: number;
+  };
+  err.name = "RateLimitQueueError";
+  err.code = code;
+  err.providerKey = key;
+  err.queued = queued;
+  err.running = running;
+  err.waitMs = waitMs;
+  return err;
+}
+
 /**
  * Acquire a rate limit slot before making a request.
  * If rate limiting is disabled for this connection, returns immediately.
@@ -236,7 +272,103 @@ export async function withRateLimit(provider, connectionId, model, fn) {
   }
 
   const limiter = getLimiter(provider, connectionId, null);
-  return limiter.schedule(fn);
+  const key = `${provider}:${connectionId}`;
+  const counts = limiter.counts();
+  const queued = counts.QUEUED || 0;
+  const running = counts.RUNNING || 0;
+
+  // Fail fast if queue is already saturated so callers can trigger account/model fallback.
+  if (MAX_QUEUE_SIZE > 0 && queued >= MAX_QUEUE_SIZE) {
+    console.warn(
+      `🚫 [RATE-LIMIT] ${key} — queue overflow (${queued} queued, ${running} running), rejecting`
+    );
+    throw buildQueueError("RATE_LIMIT_QUEUE_OVERFLOW", key, MAX_WAIT_MS, queued, running);
+  }
+
+  let timedOut = false;
+  let startedExecution = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduled = limiter
+    .schedule(async () => {
+      startedExecution = true;
+      // If timeout already fired while waiting in queue, short-circuit execution.
+      if (timedOut) {
+        const nowCounts = limiter.counts();
+        throw buildQueueError(
+          "RATE_LIMIT_QUEUE_TIMEOUT",
+          key,
+          MAX_WAIT_MS,
+          nowCounts.QUEUED || 0,
+          nowCounts.RUNNING || 0
+        );
+      }
+      return fn();
+    })
+    .then((value) => ({ ok: true as const, value }))
+    .catch((error) => ({ ok: false as const, error }));
+
+  if (MAX_WAIT_MS <= 0) {
+    const settled = await scheduled;
+    if (!settled.ok) throw settled.error;
+    return settled.value;
+  }
+
+  const timeoutResult = new Promise<{ ok: false; error: Error }>((resolve) => {
+    timeoutHandle = setTimeout(() => {
+      if (startedExecution) {
+        return;
+      }
+      timedOut = true;
+      const nowCounts = limiter.counts();
+      resolve({
+        ok: false,
+        error: buildQueueError(
+          "RATE_LIMIT_QUEUE_TIMEOUT",
+          key,
+          MAX_WAIT_MS,
+          nowCounts.QUEUED || 0,
+          nowCounts.RUNNING || 0
+        ),
+      });
+    }, MAX_WAIT_MS);
+  });
+
+  const outcome = await Promise.race([scheduled, timeoutResult]);
+
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (!outcome.ok) {
+    const outcomeError =
+      outcome.error && typeof outcome.error === "object"
+        ? outcome.error
+        : new Error("Unknown error");
+    const errorMessage =
+      outcomeError && typeof outcomeError.message === "string" ? outcomeError.message : "";
+    if (errorMessage.includes("dropped by Bottleneck")) {
+      const nowCounts = limiter.counts();
+      console.warn(
+        `🚫 [RATE-LIMIT] ${key} — queue overflow (queued=${nowCounts.QUEUED || 0}, running=${nowCounts.RUNNING || 0})`
+      );
+      throw buildQueueError(
+        "RATE_LIMIT_QUEUE_OVERFLOW",
+        key,
+        MAX_WAIT_MS,
+        nowCounts.QUEUED || 0,
+        nowCounts.RUNNING || 0
+      );
+    }
+
+    const nowCounts = limiter.counts();
+    console.warn(
+      `⌛ [RATE-LIMIT] ${key} — queue wait exceeded ${MAX_WAIT_MS}ms (queued=${nowCounts.QUEUED || 0}, running=${nowCounts.RUNNING || 0})`
+    );
+    throw outcomeError;
+  }
+
+  return outcome.value;
 }
 
 // ─── Header Parsing ──────────────────────────────────────────────────────────

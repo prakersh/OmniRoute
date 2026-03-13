@@ -296,11 +296,11 @@ export function checkFallbackError(
   model = null,
   provider = null
 ) {
+  const errorStr = typeof errorText === "string" ? errorText : JSON.stringify(errorText || "");
+  const lowerError = errorStr.toLowerCase();
+
   // Check error message FIRST - specific patterns take priority over status codes
   if (errorText) {
-    const errorStr = typeof errorText === "string" ? errorText : JSON.stringify(errorText);
-    const lowerError = errorStr.toLowerCase();
-
     if (lowerError.includes("no credentials")) {
       return {
         shouldFallback: true,
@@ -394,8 +394,26 @@ export function checkFallbackError(
     };
   }
 
-  // 400 Bad Request - don't fallback (same request will fail on all accounts)
+  // 400 Bad Request: usually do not fallback, except account/model entitlement mismatches.
+  // Example: Codex account type may not support a specific model.
   if (status === HTTP_STATUS.BAD_REQUEST) {
+    const accountModelMismatch =
+      lowerError.includes("not supported when using codex with a chatgpt account") ||
+      (lowerError.includes("model") &&
+        lowerError.includes("not supported") &&
+        lowerError.includes("account")) ||
+      (lowerError.includes("not available") &&
+        lowerError.includes("model") &&
+        lowerError.includes("account"));
+
+    if (accountModelMismatch) {
+      return {
+        shouldFallback: true,
+        cooldownMs: COOLDOWN_MS.notFound,
+        reason: RateLimitReason.AUTH_ERROR,
+      };
+    }
+
     return { shouldFallback: false, cooldownMs: 0, reason: RateLimitReason.UNKNOWN };
   }
 

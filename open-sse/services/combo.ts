@@ -413,13 +413,16 @@ export async function handleComboChat({
         null,
         provider
       );
+      // Combo-level behavior differs from account-level fallback:
+      // a 400 from one model/provider can still succeed on downstream models.
+      const effectiveShouldFallback = shouldFallback || result.status === 400;
 
       // Record failure in circuit breaker for transient errors
       if (TRANSIENT_FOR_BREAKER.includes(result.status)) {
         breaker._onFailure();
       }
 
-      if (!shouldFallback) {
+      if (!effectiveShouldFallback) {
         log.warn("COMBO", `Model ${modelStr} failed (no fallback)`, { status: result.status });
         return result;
       }
@@ -649,6 +652,9 @@ async function handleRoundRobinCombo({
           null,
           provider
         );
+        // Combo-level behavior differs from account-level fallback:
+        // a 400 from one model/provider can still succeed on downstream models.
+        const effectiveShouldFallback = shouldFallback || result.status === 400;
 
         // Transient errors → mark in semaphore AND record circuit breaker failure
         if (TRANSIENT_FOR_BREAKER.includes(result.status) && cooldownMs > 0) {
@@ -660,7 +666,7 @@ async function handleRoundRobinCombo({
           );
         }
 
-        if (!shouldFallback) {
+        if (!effectiveShouldFallback) {
           log.warn("COMBO-RR", `${modelStr} failed (no fallback)`, { status: result.status });
           return result;
         }

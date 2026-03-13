@@ -199,6 +199,79 @@ test("handleComboChat: 429 errors also trigger circuit breaker", async () => {
   assert.equal(breaker.getStatus().state, STATE.OPEN, "429s should open breaker");
 });
 
+test("handleComboChat: falls through on 400 for priority combos", async () => {
+  const combo = {
+    name: "test-400-priority",
+    models: [
+      { model: "provider-a/model-a", weight: 0 },
+      { model: "provider-b/model-b", weight: 0 },
+    ],
+    strategy: "priority",
+  };
+
+  const log = mockLog();
+  const calls = [];
+
+  const result = await handleComboChat({
+    body: {},
+    combo,
+    handleSingleModel: async (_body, modelStr) => {
+      calls.push(modelStr);
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "Model A bad request" } }), {
+          status: 400,
+          statusText: "Bad Request",
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+    isModelAvailable: () => true,
+    log,
+    settings: null,
+    allCombos: null,
+  });
+
+  assert.equal(result.ok, true, "Should fallback and succeed on second model");
+  assert.deepEqual(calls, ["provider-a/model-a", "provider-b/model-b"]);
+});
+
+test("handleComboChat: falls through on 400 for round-robin combos", async () => {
+  const combo = {
+    name: "test-400-roundrobin",
+    models: [
+      { model: "provider-a/model-a", weight: 0 },
+      { model: "provider-b/model-b", weight: 0 },
+    ],
+    strategy: "round-robin",
+    config: { maxRetries: 0, queueTimeoutMs: 1000 },
+  };
+
+  const log = mockLog();
+  const calls = [];
+
+  const result = await handleComboChat({
+    body: {},
+    combo,
+    handleSingleModel: async (_body, modelStr) => {
+      calls.push(modelStr);
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "Model A bad request" } }), {
+          status: 400,
+          statusText: "Bad Request",
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+    isModelAvailable: () => true,
+    log,
+    settings: null,
+    allCombos: null,
+  });
+
+  assert.equal(result.ok, true, "Should fallback and succeed on second model");
+  assert.deepEqual(calls, ["provider-a/model-a", "provider-b/model-b"]);
+});
+
 test("circuit breaker uses provider profile thresholds", () => {
   // OAuth providers (e.g. claude) should have lower threshold
   assert.equal(PROVIDER_PROFILES.oauth.circuitBreakerThreshold, 3);

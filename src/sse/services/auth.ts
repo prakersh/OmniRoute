@@ -95,7 +95,8 @@ const markMutexes = new Map<string, Promise<void>>();
  */
 export async function getProviderCredentials(
   provider: string,
-  excludeConnectionId: string | null = null
+  excludeConnectionId: string | null = null,
+  model: string | null = null
 ) {
   // Acquire mutex to prevent race conditions
   const currentMutex = selectionMutex;
@@ -152,6 +153,7 @@ export async function getProviderCredentials(
     const availableConnections = connections.filter((c) => {
       if (excludeConnectionId && c.id === excludeConnectionId) return false;
       if (isAccountUnavailable(c.rateLimitedUntil)) return false;
+      if (model && isModelLocked(provider, c.id, model)) return false;
       return true;
     });
 
@@ -162,10 +164,11 @@ export async function getProviderCredentials(
     connections.forEach((c) => {
       const excluded = excludeConnectionId && c.id === excludeConnectionId;
       const rateLimited = isAccountUnavailable(c.rateLimitedUntil);
-      if (excluded || rateLimited) {
+      const modelLocked = model && isModelLocked(provider, c.id, model);
+      if (excluded || rateLimited || modelLocked) {
         log.debug(
           "AUTH",
-          `  → ${c.id?.slice(0, 8)} | ${excluded ? "excluded" : ""} ${rateLimited ? `rateLimited until ${c.rateLimitedUntil}` : ""}`
+          `  → ${c.id?.slice(0, 8)} | ${excluded ? "excluded" : ""} ${rateLimited ? `rateLimited until ${c.rateLimitedUntil}` : ""} ${modelLocked ? `modelLocked(${model})` : ""}`
         );
       }
     });
