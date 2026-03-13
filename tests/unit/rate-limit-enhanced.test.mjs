@@ -21,7 +21,8 @@ const {
   applyErrorState,
 } = await import("../../open-sse/services/accountFallback.ts");
 
-const { RateLimitReason, BACKOFF_STEPS_MS } = await import("../../open-sse/config/constants.ts");
+const { RateLimitReason, BACKOFF_STEPS_MS, PROVIDER_PROFILES } =
+  await import("../../open-sse/config/constants.ts");
 
 // ─── parseRetryAfterFromBody Tests ──────────────────────────────────────────
 
@@ -169,6 +170,24 @@ test("checkFallbackError: transient errors now apply exponential backoff", () =>
   assert.equal(result.shouldFallback, true);
   assert.equal(result.newBackoffLevel, 6); // Backoff now increments for transients
   assert.ok(result.cooldownMs > 0, "cooldownMs should be positive");
+});
+
+test("checkFallbackError: 503 queue timeout uses transient cooldown profile", () => {
+  const result = checkFallbackError(
+    503,
+    "Rate limit queue timeout for codex:abc (queued=0, running=0, waitMs=3000)",
+    0,
+    null,
+    "groq"
+  );
+  assert.equal(result.shouldFallback, true);
+  assert.equal(result.cooldownMs, PROVIDER_PROFILES.apikey.transientCooldown);
+});
+
+test("checkFallbackError: 429 honors retry-after hint from message", () => {
+  const result = checkFallbackError(429, "Rate limited, please retry after 20s", 0, null, "groq");
+  assert.equal(result.shouldFallback, true);
+  assert.ok(result.cooldownMs >= 20000);
 });
 
 // ─── Backoff Steps Tests ────────────────────────────────────────────────────

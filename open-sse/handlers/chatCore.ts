@@ -381,16 +381,27 @@ export async function handleChatCore({
     );
   } catch (error) {
     trackPendingRequest(model, provider, connectionId, false);
+    const queueCode =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code || "")
+        : "";
+    const isQueueError =
+      queueCode === "RATE_LIMIT_QUEUE_TIMEOUT" || queueCode === "RATE_LIMIT_QUEUE_OVERFLOW";
+    const failureStatus = isQueueError
+      ? HTTP_STATUS.SERVICE_UNAVAILABLE
+      : error.name === "AbortError"
+        ? 499
+        : HTTP_STATUS.BAD_GATEWAY;
     appendRequestLog({
       model,
       provider,
       connectionId,
-      status: `FAILED ${error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY}`,
+      status: `FAILED ${failureStatus}`,
     }).catch(() => {});
     saveCallLog({
       method: "POST",
       path: clientRawRequest?.endpoint || "/v1/chat/completions",
-      status: error.name === "AbortError" ? 499 : HTTP_STATUS.BAD_GATEWAY,
+      status: failureStatus,
       model,
       provider,
       connectionId,
@@ -404,11 +415,7 @@ export async function handleChatCore({
       apiKeyName: apiKeyInfo?.name || null,
       noLog: apiKeyInfo?.noLog === true,
     }).catch(() => {});
-    const queueCode =
-      error && typeof error === "object" && "code" in error
-        ? String((error as { code?: unknown }).code || "")
-        : "";
-    if (queueCode === "RATE_LIMIT_QUEUE_TIMEOUT" || queueCode === "RATE_LIMIT_QUEUE_OVERFLOW") {
+    if (isQueueError) {
       const queueMsg = formatProviderError(error, provider, model, HTTP_STATUS.SERVICE_UNAVAILABLE);
       console.log(`${COLORS.yellow}[WARN] ${queueMsg}${COLORS.reset}`);
       return createErrorResult(HTTP_STATUS.SERVICE_UNAVAILABLE, queueMsg);

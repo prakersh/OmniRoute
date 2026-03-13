@@ -167,6 +167,36 @@ export function parseRetryAfterFromBody(responseBody) {
 }
 
 /**
+ * Parse retry-after hints from plain-text error messages.
+ * Supports:
+ * - "retry after 20s"
+ * - "reset after 1m 30s"
+ * - "waitMs=3000"
+ */
+function parseRetryAfterFromText(errorText) {
+  if (!errorText) return null;
+  const text = String(errorText);
+  const lower = text.toLowerCase();
+
+  const retryAfterSec = lower.match(/retry\s+after\s+(\d+)\s*s/);
+  if (retryAfterSec) return parseInt(retryAfterSec[1], 10) * 1000;
+
+  const resetAfter = lower.match(/reset\s+after\s+(\d+)\s*(h|m|s)/);
+  if (resetAfter) {
+    const value = parseInt(resetAfter[1], 10);
+    const unit = resetAfter[2];
+    if (unit === "h") return value * 3600 * 1000;
+    if (unit === "m") return value * 60 * 1000;
+    return value * 1000;
+  }
+
+  const waitMs = lower.match(/waitms\s*=\s*(\d+)/);
+  if (waitMs) return parseInt(waitMs[1], 10);
+
+  return null;
+}
+
+/**
  * Parse delay strings like "33s", "2m", "1h", "1500ms"
  */
 function parseDelayString(value) {
@@ -316,24 +346,6 @@ export function checkFallbackError(
         reason: RateLimitReason.RATE_LIMIT_EXCEEDED,
       };
     }
-
-    // Rate limit keywords - exponential backoff
-    if (
-      lowerError.includes("rate limit") ||
-      lowerError.includes("too many requests") ||
-      lowerError.includes("quota exceeded") ||
-      lowerError.includes("capacity") ||
-      lowerError.includes("overloaded")
-    ) {
-      const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
-      const reason = classifyErrorText(errorStr);
-      return {
-        shouldFallback: true,
-        cooldownMs: getQuotaCooldown(backoffLevel),
-        newBackoffLevel: newLevel,
-        reason,
-      };
-    }
   }
 
   if (status === HTTP_STATUS.UNAUTHORIZED) {
@@ -362,12 +374,24 @@ export function checkFallbackError(
 
   // 429 - Rate limit with exponential backoff
   if (status === HTTP_STATUS.RATE_LIMITED) {
+    const parsedBody = parseRetryAfterFromBody(errorText);
+    const parsedText = parseRetryAfterFromText(errorStr);
+    const profile = provider ? getProviderProfile(provider) : null;
+    const fallbackRateLimitMs =
+      profile?.rateLimitCooldown && profile.rateLimitCooldown > 0
+        ? profile.rateLimitCooldown
+        : 60_000;
+    const parsedRetryAfter = parsedBody.retryAfterMs || parsedText || 0;
     const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
+    const reason =
+      parsedBody.reason && parsedBody.reason !== RateLimitReason.UNKNOWN
+        ? parsedBody.reason
+        : classifyErrorText(errorStr) || RateLimitReason.RATE_LIMIT_EXCEEDED;
     return {
       shouldFallback: true,
-      cooldownMs: getQuotaCooldown(backoffLevel),
+      cooldownMs: Math.max(parsedRetryAfter || fallbackRateLimitMs, getQuotaCooldown(backoffLevel)),
       newBackoffLevel: newLevel,
-      reason: RateLimitReason.RATE_LIMIT_EXCEEDED,
+      reason: reason === RateLimitReason.UNKNOWN ? RateLimitReason.RATE_LIMIT_EXCEEDED : reason,
     };
   }
 
@@ -386,11 +410,12 @@ export function checkFallbackError(
     const maxLevel = profile?.maxBackoffLevel ?? BACKOFF_CONFIG.maxLevel;
     const cooldownMs = Math.min(baseCooldown * Math.pow(2, backoffLevel), COOLDOWN_MS.transientMax);
     const newLevel = Math.min(backoffLevel + 1, maxLevel);
+    const reason = classifyError(status, errorStr);
     return {
       shouldFallback: true,
       cooldownMs,
       newBackoffLevel: newLevel,
-      reason: RateLimitReason.SERVER_ERROR,
+      reason: reason === RateLimitReason.UNKNOWN ? RateLimitReason.SERVER_ERROR : reason,
     };
   }
 
@@ -415,6 +440,24 @@ export function checkFallbackError(
     }
 
     return { shouldFallback: false, cooldownMs: 0, reason: RateLimitReason.UNKNOWN };
+  }
+
+  // Keyword fallback when status is missing/unknown
+  if (
+    lowerError.includes("rate limit") ||
+    lowerError.includes("too many requests") ||
+    lowerError.includes("quota exceeded") ||
+    lowerError.includes("capacity") ||
+    lowerError.includes("overloaded")
+  ) {
+    const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
+    const reason = classifyErrorText(errorStr);
+    return {
+      shouldFallback: true,
+      cooldownMs: getQuotaCooldown(backoffLevel),
+      newBackoffLevel: newLevel,
+      reason,
+    };
   }
 
   // All other errors - fallback with transient cooldown
