@@ -159,6 +159,19 @@ test("checkFallbackError: 400 does not trigger fallback", () => {
   assert.equal(result.shouldFallback, false);
 });
 
+test("checkFallbackError: MiniMax tool id mismatch 400 triggers fallback", () => {
+  const result = checkFallbackError(
+    400,
+    "invalid params, tool result's tool id(toolu_1) not found (2013)",
+    0,
+    null,
+    "minimax"
+  );
+  assert.equal(result.shouldFallback, true);
+  assert.equal(result.reason, RateLimitReason.MODEL_CAPACITY);
+  assert.equal(result.newBackoffLevel, 1);
+});
+
 test("checkFallbackError: server error has reason", () => {
   const result = checkFallbackError(500, "internal server error");
   assert.equal(result.shouldFallback, true);

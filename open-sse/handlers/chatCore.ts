@@ -120,6 +120,14 @@ export async function ensureFirstStreamChunk(
   }
 }
 
+const PLACEHOLDER_TOOL_NAME = "placeholder_tool";
+
+function normalizeToolName(value: unknown): string {
+  if (typeof value !== "string") return PLACEHOLDER_TOOL_NAME;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : PLACEHOLDER_TOOL_NAME;
+}
+
 /**
  * Core chat handler - shared between SSE and Worker
  * Returns { success, response, status, error } for caller to handle fallback
@@ -243,20 +251,68 @@ export async function handleChatCore({
       translatedBody = { ...translatedBody, _disableToolPrefix: true };
     }
 
-    // ── #291: Strip empty name fields from messages/input items ──
+    // ── #291: Normalize/strip empty name fields from messages/input items ──
     // Upstream providers (OpenAI, Codex) reject name:"" with 400 errors.
     // Clients like PocketPaw may forward empty name fields from assistant turns.
     if (Array.isArray(body.messages)) {
       body.messages = body.messages.map((msg: Record<string, unknown>) => {
+        let nextMsg: Record<string, unknown> = msg;
+
         if (msg.name === "") {
-          const { name: _n, ...rest } = msg;
-          return rest;
+          const { name: _n, ...rest } = nextMsg;
+          nextMsg = rest;
         }
-        return msg;
+
+        if (Array.isArray(nextMsg.content)) {
+          nextMsg = {
+            ...nextMsg,
+            content: nextMsg.content.map((blockValue: unknown) => {
+              const block = blockValue as Record<string, unknown>;
+              if (block?.type !== "tool_use") return blockValue;
+              return { ...block, name: normalizeToolName(block.name) };
+            }),
+          };
+        }
+
+        if (Array.isArray(nextMsg.tool_calls)) {
+          nextMsg = {
+            ...nextMsg,
+            tool_calls: nextMsg.tool_calls.map((toolCallValue: unknown) => {
+              const toolCall = toolCallValue as Record<string, unknown>;
+              const fn = toolCall.function as Record<string, unknown> | undefined;
+              if (!fn || typeof fn !== "object") return toolCallValue;
+              return {
+                ...toolCall,
+                function: { ...fn, name: normalizeToolName(fn.name) },
+              };
+            }),
+          };
+        }
+
+        return nextMsg;
       });
     }
+
+    if (Array.isArray(body.tools)) {
+      body.tools = body.tools.map((toolValue: unknown) => {
+        const tool = toolValue as Record<string, unknown>;
+        const fn = tool.function as Record<string, unknown> | undefined;
+        const normalizedTool: Record<string, unknown> = { ...tool };
+        if ("name" in normalizedTool) {
+          normalizedTool.name = normalizeToolName(normalizedTool.name);
+        }
+        if (fn && typeof fn === "object") {
+          normalizedTool.function = { ...fn, name: normalizeToolName(fn.name) };
+        }
+        return normalizedTool;
+      });
+    }
+
     if (Array.isArray(body.input)) {
       body.input = body.input.map((item: Record<string, unknown>) => {
+        if (item.name === "" && item.type === "function_call") {
+          return { ...item, name: PLACEHOLDER_TOOL_NAME };
+        }
         if (item.name === "") {
           const { name: _n, ...rest } = item;
           return rest;

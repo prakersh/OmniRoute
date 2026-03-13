@@ -422,6 +422,24 @@ export function checkFallbackError(
   // 400 Bad Request: usually do not fallback, except account/model entitlement mismatches.
   // Example: Codex account type may not support a specific model.
   if (status === HTTP_STATUS.BAD_REQUEST) {
+    const minimaxToolLinkMismatch =
+      lowerError.includes("tool result's tool id") &&
+      lowerError.includes("not found") &&
+      lowerError.includes("(2013)");
+
+    if (minimaxToolLinkMismatch) {
+      const profile = provider ? getProviderProfile(provider) : null;
+      const baseCooldown = profile?.transientCooldown ?? COOLDOWN_MS.transientInitial;
+      const maxLevel = profile?.maxBackoffLevel ?? BACKOFF_CONFIG.maxLevel;
+      const newLevel = Math.min(backoffLevel + 1, maxLevel);
+      return {
+        shouldFallback: true,
+        cooldownMs: Math.min(baseCooldown * Math.pow(2, backoffLevel), COOLDOWN_MS.transientMax),
+        newBackoffLevel: newLevel,
+        reason: RateLimitReason.MODEL_CAPACITY,
+      };
+    }
+
     const accountModelMismatch =
       lowerError.includes("not supported when using codex with a chatgpt account") ||
       (lowerError.includes("model") &&
