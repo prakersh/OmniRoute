@@ -282,6 +282,11 @@ export async function getProviderCredentials(
         return new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime();
       });
       connection = sorted[0];
+
+      // Persist usage immediately so least-used decisions stay real-time.
+      await updateProviderConnection(connection.id, {
+        lastUsedAt: new Date().toISOString(),
+      });
     } else if (strategy === "cost-optimized") {
       // Cost Optimized: sort by priority ascending (lower = cheaper/preferred)
       // Future: can be enhanced with actual cost data per provider
