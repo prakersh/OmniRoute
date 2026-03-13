@@ -129,7 +129,7 @@ export default function RequestLoggerV2() {
         if (selectedProvider) params.set("provider", selectedProvider);
         if (selectedAccount) params.set("account", selectedAccount);
         if (selectedApiKey) params.set("apiKey", selectedApiKey);
-        params.set("limit", "300");
+        params.set("limit", "5000");
 
         const res = await fetch(`/api/usage/call-logs?${params}`);
         if (res.ok) {

@@ -186,6 +186,9 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       tokenUrl: "https://auth.openai.com/oauth/token",
     },
     models: [
+      { id: "gpt-5.4", name: "GPT 5.4" },
+      { id: "gpt-5.4-high", name: "GPT 5.4 (High)" },
+      { id: "gpt-5.4-xhigh", name: "GPT 5.4 (xHigh)" },
       { id: "gpt-5.3-codex", name: "GPT 5.3 Codex" },
       { id: "gpt-5.3-codex-xhigh", name: "GPT 5.3 Codex (xHigh)" },
       { id: "gpt-5.3-codex-high", name: "GPT 5.3 Codex (High)" },

@@ -194,17 +194,29 @@ export function classifyErrorText(errorText) {
   if (!errorText) return RateLimitReason.UNKNOWN;
   const lower = String(errorText).toLowerCase();
 
+  const hasQuotaLikeLimit =
+    (lower.includes("limit reached") || lower.includes("limit exceeded")) &&
+    (lower.includes("usage") || lower.includes("quota") || lower.includes("billing"));
+
   if (
     lower.includes("quota exceeded") ||
     lower.includes("quota depleted") ||
-    lower.includes("billing")
+    lower.includes("insufficient_quota") ||
+    lower.includes("usage limit") ||
+    lower.includes("hard limit") ||
+    lower.includes("billing") ||
+    hasQuotaLikeLimit
   ) {
     return RateLimitReason.QUOTA_EXHAUSTED;
   }
   if (
     lower.includes("rate limit") ||
     lower.includes("too many requests") ||
-    lower.includes("rate_limit")
+    lower.includes("rate_limit") ||
+    lower.includes("rate_limit_exceeded") ||
+    lower.includes("request limit") ||
+    lower.includes("requests per minute") ||
+    lower.includes("tokens per minute")
   ) {
     return RateLimitReason.RATE_LIMIT_EXCEEDED;
   }
@@ -322,8 +334,21 @@ export function checkFallbackError(
       lowerError.includes("rate limit") ||
       lowerError.includes("too many requests") ||
       lowerError.includes("quota exceeded") ||
+      lowerError.includes("insufficient_quota") ||
+      lowerError.includes("usage limit") ||
+      lowerError.includes("hard limit") ||
+      lowerError.includes("rate_limit_exceeded") ||
+      lowerError.includes("request limit") ||
+      lowerError.includes("requests per minute") ||
+      lowerError.includes("tokens per minute") ||
       lowerError.includes("capacity") ||
-      lowerError.includes("overloaded")
+      lowerError.includes("overloaded") ||
+      ((lowerError.includes("limit reached") || lowerError.includes("limit exceeded")) &&
+        (lowerError.includes("usage") ||
+          lowerError.includes("quota") ||
+          lowerError.includes("rate") ||
+          lowerError.includes("billing") ||
+          lowerError.includes("request")))
     ) {
       const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
       const reason = classifyErrorText(errorStr);

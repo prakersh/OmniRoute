@@ -24,10 +24,12 @@ export async function GET() {
         `SELECT
           provider,
           COUNT(*) as totalRequests,
-          SUM(CASE WHEN status >= 200 AND status < 400 THEN 1 ELSE 0 END) as totalSuccesses,
-          ROUND(AVG(duration)) as avgLatencyMs
+          SUM(CASE WHEN status >= 200 AND status < 300 THEN 1 ELSE 0 END) as totalSuccesses,
+          ROUND(AVG(CASE WHEN duration > 0 THEN duration END)) as avgLatencyMs
         FROM call_logs
-        WHERE provider IS NOT NULL AND provider != '-'
+        WHERE provider IS NOT NULL
+          AND provider != ''
+          AND provider != '-'
         GROUP BY provider`
       )
       .all() as JsonRecord[];

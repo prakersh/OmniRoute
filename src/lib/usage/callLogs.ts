@@ -33,6 +33,133 @@ function toStringOrNull(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function readTokenValue(container: JsonRecord, keys: string[]): number | undefined {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(container, key)) continue;
+    const raw = container[key];
+    if (raw === undefined || raw === null) continue;
+    const numeric = toNumber(raw);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return undefined;
+}
+
+function normalizeTokenPair(rawTokens: unknown): { in: number; out: number } {
+  const tokens = asRecord(rawTokens);
+  const nestedUsage = asRecord(tokens.usage);
+
+  const input =
+    readTokenValue(tokens, [
+      "in",
+      "input",
+      "prompt_tokens",
+      "input_tokens",
+      "promptTokens",
+      "tokens_in",
+    ]) ??
+    readTokenValue(nestedUsage, [
+      "in",
+      "input",
+      "prompt_tokens",
+      "input_tokens",
+      "promptTokens",
+      "tokens_in",
+    ]) ??
+    0;
+
+  const output =
+    readTokenValue(tokens, [
+      "out",
+      "output",
+      "completion_tokens",
+      "output_tokens",
+      "completionTokens",
+      "tokens_out",
+    ]) ??
+    readTokenValue(nestedUsage, [
+      "out",
+      "output",
+      "completion_tokens",
+      "output_tokens",
+      "completionTokens",
+      "tokens_out",
+    ]) ??
+    0;
+
+  return { in: input, out: output };
+}
+
+function extractTokensFromPayload(payload: unknown): { in: number; out: number } | null {
+  const root = asRecord(payload);
+
+  // OpenAI-like payloads: { usage: { prompt_tokens, completion_tokens } }
+  const usage = asRecord(root.usage);
+  if (Object.keys(usage).length > 0) {
+    const pair = normalizeTokenPair(usage);
+    if (pair.in > 0 || pair.out > 0) return pair;
+  }
+
+  // Responses payloads: { response: { usage: { input_tokens, output_tokens } } }
+  const response = asRecord(root.response);
+  const responseUsage = asRecord(response.usage);
+  if (Object.keys(responseUsage).length > 0) {
+    const pair = normalizeTokenPair(responseUsage);
+    if (pair.in > 0 || pair.out > 0) return pair;
+  }
+
+  // Gemini payloads: { usageMetadata: { promptTokenCount, candidatesTokenCount } }
+  const usageMetadata = asRecord(root.usageMetadata);
+  if (Object.keys(usageMetadata).length > 0) {
+    const inTokens = readTokenValue(usageMetadata, ["promptTokenCount"]) ?? 0;
+    const outTokens = readTokenValue(usageMetadata, ["candidatesTokenCount"]) ?? 0;
+    if (inTokens > 0 || outTokens > 0) return { in: inTokens, out: outTokens };
+  }
+
+  return null;
+}
+
+function estimateTokenCount(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  try {
+    const str = typeof value === "string" ? value : JSON.stringify(value);
+    if (!str) return 0;
+    return Math.max(0, Math.ceil(str.length / 4));
+  } catch {
+    return 0;
+  }
+}
+
+function estimateTokenPairFromBodies(
+  requestBody: unknown,
+  responseBody: unknown
+): {
+  in: number;
+  out: number;
+} {
+  return {
+    in: estimateTokenCount(requestBody),
+    out: estimateTokenCount(responseBody),
+  };
+}
+
+function mergeMissingTokenFields(
+  base: { in: number; out: number },
+  candidate: { in: number; out: number } | null
+): { in: number; out: number } {
+  if (!candidate) return base;
+  return {
+    in: base.in > 0 ? base.in : Math.max(0, candidate.in),
+    out: base.out > 0 ? base.out : Math.max(0, candidate.out),
+  };
+}
+
+function toIsoInWindow(centerIso: string | null, offsetMs: number): string | null {
+  if (!centerIso) return null;
+  const t = Date.parse(centerIso);
+  if (!Number.isFinite(t)) return null;
+  return new Date(t + offsetMs).toISOString();
+}
+
 function parseJsonString(value: unknown): unknown | null {
   if (typeof value !== "string" || value.trim().length === 0) return null;
   try {
@@ -47,7 +174,7 @@ function hasTruncatedFlag(value: unknown): boolean {
   return (value as Record<string, unknown>)._truncated === true;
 }
 
-const CALL_LOGS_MAX = parseInt(process.env.CALL_LOGS_MAX || "200", 10);
+const CALL_LOGS_MAX = parseInt(process.env.CALL_LOGS_MAX || "5000", 10);
 const LOG_RETENTION_DAYS = parseInt(process.env.LOG_RETENTION_DAYS || "7", 10);
 const CALL_LOG_PAYLOAD_MODE = (() => {
   const value = (process.env.CALL_LOG_PAYLOAD_MODE || "full").toLowerCase();
@@ -142,6 +269,15 @@ export async function saveCallLog(entry: any) {
   if (!shouldPersistToDisk) return;
 
   try {
+    let normalizedTokens = normalizeTokenPair(entry.tokens ?? entry.usage);
+    normalizedTokens = mergeMissingTokenFields(
+      normalizedTokens,
+      extractTokensFromPayload(entry.responseBody) || extractTokensFromPayload(entry.requestBody)
+    );
+    normalizedTokens = mergeMissingTokenFields(
+      normalizedTokens,
+      estimateTokenPairFromBodies(entry.requestBody, entry.responseBody)
+    );
     const apiKeyId = entry.apiKeyId || null;
     const noLogEnabled = Boolean(entry.noLog) || (apiKeyId ? isNoLog(apiKeyId) : false);
 
@@ -184,8 +320,8 @@ export async function saveCallLog(entry: any) {
       account,
       connectionId: entry.connectionId || null,
       duration: entry.duration || 0,
-      tokensIn: entry.tokens?.prompt_tokens || 0,
-      tokensOut: entry.tokens?.completion_tokens || 0,
+      tokensIn: normalizedTokens.in,
+      tokensOut: normalizedTokens.out,
       sourceFormat: entry.sourceFormat || null,
       targetFormat: entry.targetFormat || null,
       apiKeyId,
@@ -293,11 +429,309 @@ export function rotateCallLogs() {
   }
 }
 
+function backfillCallLogTokenColumns() {
+  const db = getDbInstance();
+  const rows = db
+    .prepare(
+      `
+      SELECT id, provider, model, connection_id, api_key_id, status, timestamp,
+             tokens_in, tokens_out, request_body, response_body
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND (COALESCE(tokens_in, 0) = 0 OR COALESCE(tokens_out, 0) = 0)
+      `
+    )
+    .all() as unknown[];
+
+  if (rows.length === 0) return;
+
+  const updateStmt = db.prepare("UPDATE call_logs SET tokens_in = ?, tokens_out = ? WHERE id = ?");
+  const modelRatioRows = db
+    .prepare(
+      `
+      SELECT provider, model, SUM(tokens_in) AS in_sum, SUM(tokens_out) AS out_sum
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND COALESCE(tokens_in, 0) > 0
+        AND COALESCE(tokens_out, 0) > 0
+      GROUP BY provider, model
+      `
+    )
+    .all() as unknown[];
+  const modelAvgRows = db
+    .prepare(
+      `
+      SELECT provider, model, AVG(tokens_in) AS avg_in, AVG(tokens_out) AS avg_out
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND COALESCE(tokens_in, 0) > 0
+        AND COALESCE(tokens_out, 0) > 0
+      GROUP BY provider, model
+      `
+    )
+    .all() as unknown[];
+  const providerRatioRows = db
+    .prepare(
+      `
+      SELECT provider, SUM(tokens_in) AS in_sum, SUM(tokens_out) AS out_sum
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND COALESCE(tokens_in, 0) > 0
+        AND COALESCE(tokens_out, 0) > 0
+      GROUP BY provider
+      `
+    )
+    .all() as unknown[];
+  const providerAvgRows = db
+    .prepare(
+      `
+      SELECT provider, AVG(tokens_in) AS avg_in, AVG(tokens_out) AS avg_out
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND COALESCE(tokens_in, 0) > 0
+        AND COALESCE(tokens_out, 0) > 0
+      GROUP BY provider
+      `
+    )
+    .all() as unknown[];
+  const globalAverages = asRecord(
+    db
+      .prepare(
+        `
+      SELECT AVG(tokens_in) AS avg_in, AVG(tokens_out) AS avg_out
+      FROM call_logs
+      WHERE status >= 200
+        AND status < 300
+        AND COALESCE(tokens_in, 0) > 0
+        AND COALESCE(tokens_out, 0) > 0
+      `
+      )
+      .get()
+  );
+
+  const modelRatioMap = new Map<string, number>();
+  const providerRatioMap = new Map<string, number>();
+  const modelAvgMap = new Map<string, { in: number; out: number }>();
+  const providerAvgMap = new Map<string, { in: number; out: number }>();
+  const globalAvg = {
+    in: Math.max(0, Math.round(toNumber(globalAverages.avg_in))),
+    out: Math.max(0, Math.round(toNumber(globalAverages.avg_out))),
+  };
+  for (const rowRaw of modelRatioRows) {
+    const row = asRecord(rowRaw);
+    const provider = toStringOrNull(row.provider);
+    const model = toStringOrNull(row.model);
+    if (!provider || !model) continue;
+    const inSum = toNumber(row.in_sum);
+    const outSum = toNumber(row.out_sum);
+    if (inSum <= 0 || outSum <= 0) continue;
+    modelRatioMap.set(`${provider}::${model}`, outSum / inSum);
+  }
+  for (const rowRaw of providerRatioRows) {
+    const row = asRecord(rowRaw);
+    const provider = toStringOrNull(row.provider);
+    if (!provider) continue;
+    const inSum = toNumber(row.in_sum);
+    const outSum = toNumber(row.out_sum);
+    if (inSum <= 0 || outSum <= 0) continue;
+    providerRatioMap.set(provider, outSum / inSum);
+  }
+  for (const rowRaw of modelAvgRows) {
+    const row = asRecord(rowRaw);
+    const provider = toStringOrNull(row.provider);
+    const model = toStringOrNull(row.model);
+    if (!provider || !model) continue;
+    const avgIn = Math.max(0, Math.round(toNumber(row.avg_in)));
+    const avgOut = Math.max(0, Math.round(toNumber(row.avg_out)));
+    if (avgIn <= 0 || avgOut <= 0) continue;
+    modelAvgMap.set(`${provider}::${model}`, { in: avgIn, out: avgOut });
+  }
+  for (const rowRaw of providerAvgRows) {
+    const row = asRecord(rowRaw);
+    const provider = toStringOrNull(row.provider);
+    if (!provider) continue;
+    const avgIn = Math.max(0, Math.round(toNumber(row.avg_in)));
+    const avgOut = Math.max(0, Math.round(toNumber(row.avg_out)));
+    if (avgIn <= 0 || avgOut <= 0) continue;
+    providerAvgMap.set(provider, { in: avgIn, out: avgOut });
+  }
+
+  const usageLookupStrict = db.prepare(
+    `
+      SELECT rowid, tokens_input, tokens_output
+      FROM usage_history
+      WHERE provider = @provider
+        AND model = @model
+        AND ((connection_id IS NULL AND @connectionId IS NULL) OR connection_id = @connectionId)
+        AND ((api_key_id IS NULL AND @apiKeyId IS NULL) OR api_key_id = @apiKeyId)
+        AND timestamp BETWEEN @startTs AND @endTs
+      ORDER BY ABS(strftime('%s', timestamp) - strftime('%s', @targetTs)) ASC
+      LIMIT 10
+    `
+  );
+  const usageLookupLoose = db.prepare(
+    `
+      SELECT rowid, tokens_input, tokens_output
+      FROM usage_history
+      WHERE provider = @provider
+        AND model = @model
+        AND timestamp BETWEEN @startTs AND @endTs
+      ORDER BY ABS(strftime('%s', timestamp) - strftime('%s', @targetTs)) ASC
+      LIMIT 10
+    `
+  );
+  const usedUsageRows = new Set<number>();
+
+  const pickUsageCandidate = (
+    candidatesRaw: unknown[],
+    current: { in: number; out: number }
+  ): { rowid: number; in: number; out: number } | null => {
+    for (const candidateRaw of candidatesRaw) {
+      const candidate = asRecord(candidateRaw);
+      const rowid = toNumber(candidate.rowid);
+      if (rowid <= 0 || usedUsageRows.has(rowid)) continue;
+      const inTokens = toNumber(candidate.tokens_input);
+      const outTokens = toNumber(candidate.tokens_output);
+      if (current.in <= 0 && inTokens <= 0) continue;
+      if (current.out <= 0 && outTokens <= 0) continue;
+      return { rowid, in: inTokens, out: outTokens };
+    }
+    return null;
+  };
+  const inferMissingWithRatios = (
+    current: { in: number; out: number },
+    provider: string | null,
+    model: string | null
+  ): { in: number; out: number } => {
+    if (!provider) return current;
+    const key = provider && model ? `${provider}::${model}` : null;
+    const ratio = (key ? modelRatioMap.get(key) : undefined) ?? providerRatioMap.get(provider);
+    if (!ratio || !Number.isFinite(ratio) || ratio <= 0) return current;
+    const safeRatio = Math.min(Math.max(ratio, 0.0001), 10);
+    const next = { ...current };
+    if (next.out <= 0 && next.in > 0) {
+      next.out = Math.max(1, Math.round(next.in * safeRatio));
+    } else if (next.in <= 0 && next.out > 0) {
+      next.in = Math.max(1, Math.round(next.out / safeRatio));
+    }
+    return next;
+  };
+  const inferBothZeroWithAverages = (
+    current: { in: number; out: number },
+    provider: string | null,
+    model: string | null
+  ): { in: number; out: number } => {
+    if (current.in > 0 || current.out > 0) return current;
+    const key = provider && model ? `${provider}::${model}` : null;
+    const fromModel = key ? modelAvgMap.get(key) : undefined;
+    const fromProvider = provider ? providerAvgMap.get(provider) : undefined;
+    const selected =
+      fromModel || fromProvider || (globalAvg.in > 0 && globalAvg.out > 0 ? globalAvg : null);
+    if (!selected) return current;
+    return {
+      in: Math.max(1, selected.in),
+      out: Math.max(1, selected.out),
+    };
+  };
+
+  let updated = 0;
+
+  for (const rowRaw of rows) {
+    const row = asRecord(rowRaw);
+    const id = toStringOrNull(row.id);
+    if (!id) continue;
+
+    const currentTokens = { in: toNumber(row.tokens_in), out: toNumber(row.tokens_out) };
+    let resolved = { ...currentTokens };
+    const responseBody = parseJsonString(row.response_body);
+    const requestBody = parseJsonString(row.request_body);
+
+    resolved = mergeMissingTokenFields(
+      resolved,
+      extractTokensFromPayload(responseBody) || extractTokensFromPayload(requestBody)
+    );
+
+    const provider = toStringOrNull(row.provider);
+    const model = toStringOrNull(row.model);
+    const connectionId = toStringOrNull(row.connection_id);
+    const apiKeyId = toStringOrNull(row.api_key_id);
+    const timestamp = toStringOrNull(row.timestamp);
+
+    if ((resolved.in <= 0 || resolved.out <= 0) && provider && model && timestamp) {
+      const startTs = toIsoInWindow(timestamp, -900_000);
+      const endTs = toIsoInWindow(timestamp, 900_000);
+      if (startTs && endTs) {
+        const strictCandidates = usageLookupStrict.all({
+          provider,
+          model,
+          connectionId,
+          apiKeyId,
+          startTs,
+          endTs,
+          targetTs: timestamp,
+        }) as unknown[];
+        let usageMatch = pickUsageCandidate(strictCandidates, resolved);
+
+        if (!usageMatch) {
+          const looseCandidates = usageLookupLoose.all({
+            provider,
+            model,
+            startTs,
+            endTs,
+            targetTs: timestamp,
+          }) as unknown[];
+          usageMatch = pickUsageCandidate(looseCandidates, resolved);
+        }
+
+        if (usageMatch) {
+          resolved = mergeMissingTokenFields(resolved, {
+            in: usageMatch.in,
+            out: usageMatch.out,
+          });
+          usedUsageRows.add(usageMatch.rowid);
+        }
+      }
+    }
+
+    if (resolved.in <= 0 || resolved.out <= 0) {
+      resolved = inferMissingWithRatios(resolved, provider, model);
+    }
+    if (resolved.in <= 0 && resolved.out <= 0) {
+      resolved = inferBothZeroWithAverages(resolved, provider, model);
+    }
+
+    resolved = mergeMissingTokenFields(
+      resolved,
+      estimateTokenPairFromBodies(requestBody, responseBody)
+    );
+
+    if (resolved.in === currentTokens.in && resolved.out === currentTokens.out) continue;
+    if (resolved.in <= 0 && resolved.out <= 0) continue;
+
+    updateStmt.run(resolved.in, resolved.out, id);
+    updated++;
+  }
+
+  if (updated > 0) {
+    console.log(`[callLogs] Backfilled token columns for ${updated} existing log rows`);
+  }
+}
+
 // Run rotation on startup
 if (shouldPersistToDisk) {
   try {
     rotateCallLogs();
   } catch {}
+  try {
+    backfillCallLogTokenColumns();
+  } catch (err: any) {
+    console.error("[callLogs] Failed to backfill token columns:", err.message);
+  }
 }
 
 /**

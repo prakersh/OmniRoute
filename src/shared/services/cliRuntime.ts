@@ -46,6 +46,15 @@ const CLI_TOOLS: Record<string, any> = {
       settings: ".openclaw/openclaw.json",
     },
   },
+  opencode: {
+    defaultCommand: "opencode",
+    envBinKey: "CLI_OPENCODE_BIN",
+    requiresBinary: true,
+    healthcheckTimeoutMs: 8000,
+    paths: {
+      settings: ".config/opencode/opencode.json",
+    },
+  },
   cursor: {
     defaultCommands: ["agent", "cursor"],
     envBinKey: "CLI_CURSOR_BIN",
@@ -95,7 +104,11 @@ const parseBoolean = (value: unknown, defaultValue = true) => {
   return !FALSE_VALUES.has(String(value).trim().toLowerCase());
 };
 
-const runProcess = (command: string, args: string[], { env, timeoutMs = 3000 }: { env?: Record<string, string | undefined>; timeoutMs?: number } = {}): Promise<any> =>
+const runProcess = (
+  command: string,
+  args: string[],
+  { env, timeoutMs = 3000 }: { env?: Record<string, string | undefined>; timeoutMs?: number } = {}
+): Promise<any> =>
   new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -231,7 +244,10 @@ const locateCommand = async (command: string, env: Record<string, string | undef
   return { installed: !!first, commandPath: first, reason: first ? null : "not_found" };
 };
 
-const locateCommandCandidate = async (commands: string[], env: Record<string, string | undefined>) => {
+const locateCommandCandidate = async (
+  commands: string[],
+  env: Record<string, string | undefined>
+) => {
   if (!Array.isArray(commands) || commands.length === 0) {
     return { command: null, installed: false, commandPath: null, reason: "missing_command" };
   }
@@ -246,7 +262,11 @@ const locateCommandCandidate = async (commands: string[], env: Record<string, st
   return { command: commands[0], installed: false, commandPath: null, reason: "not_found" };
 };
 
-const checkRunnable = async (commandPath: string, env: Record<string, string | undefined>, timeoutMs = 4000) => {
+const checkRunnable = async (
+  commandPath: string,
+  env: Record<string, string | undefined>,
+  timeoutMs = 4000
+) => {
   for (const args of [["--version"], ["-v"]]) {
     const result = await runProcess(commandPath, args, { env, timeoutMs });
     if (result.ok) {
@@ -272,7 +292,10 @@ export const getCliConfigPaths = (toolId: string) => {
   if (!tool) return null;
   const home = getCliConfigHome();
   return Object.fromEntries(
-    Object.entries(tool.paths).map(([key, relativePath]) => [key, path.join(home, relativePath as string)])
+    Object.entries(tool.paths).map(([key, relativePath]) => [
+      key,
+      path.join(home, relativePath as string),
+    ])
   );
 };
 

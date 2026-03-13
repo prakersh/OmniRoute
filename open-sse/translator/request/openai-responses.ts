@@ -319,10 +319,14 @@ export function openaiToOpenAIResponsesRequest(
         for (const toolCallValue of msg.tool_calls) {
           const toolCall = toRecord(toolCallValue);
           const fn = toRecord(toolCall.function);
+          // Use placeholder name if empty (causes Codex 400 error like "Invalid 'input[1].name': empty string")
+          // This ensures tool_call_id matches for subsequent function_call_output
+          const fnName = toString(fn.name);
+          const validName = fnName && fnName.trim() ? fnName : "placeholder_tool";
           input.push({
             type: "function_call",
             call_id: toString(toolCall.id),
-            name: toString(fn.name),
+            name: validName,
             arguments: toString(fn.arguments, "{}"),
           });
         }
@@ -350,9 +354,12 @@ export function openaiToOpenAIResponsesRequest(
       const tool = toRecord(toolValue);
       if (tool.type === "function") {
         const fn = toRecord(tool.function);
+        const fnName = toString(fn.name);
+        // Use placeholder name if empty (causes Codex 400 error)
+        const validName = fnName && fnName.trim() ? fnName : "placeholder_tool";
         return {
           type: "function",
-          name: toString(fn.name),
+          name: validName,
           description: toString(fn.description),
           parameters: fn.parameters,
           strict: fn.strict,

@@ -102,6 +102,7 @@ export function createSSEStream(options: StreamOptions = {}) {
     body = null,
     onComplete = null,
   } = options;
+  const emitDoneForClient = sourceFormat !== FORMATS.CLAUDE;
 
   let buffer = "";
   let usage = null;
@@ -175,6 +176,9 @@ export function createSSEStream(options: StreamOptions = {}) {
             if (trimmed.startsWith("data:") && trimmed.slice(5).trim() !== "[DONE]") {
               try {
                 let parsed = JSON.parse(trimmed.slice(5).trim());
+                const eventType = typeof parsed?.type === "string" ? parsed.type : "";
+                const isClaudeSSE =
+                  eventType.startsWith("message_") || eventType.startsWith("content_block_");
 
                 // Detect Responses SSE payloads (have a `type` field like "response.created",
                 // "response.output_item.added", etc.) and skip Chat Completions-specific
@@ -194,6 +198,24 @@ export function createSSEStream(options: StreamOptions = {}) {
                   if (parsed.delta && typeof parsed.delta === "string") {
                     totalContentLength += parsed.delta.length;
                   }
+                } else if (isClaudeSSE) {
+                  // Claude SSE (message_* / content_block_*) must bypass OpenAI chunk sanitization.
+                  const extracted = extractUsage(parsed);
+                  if (extracted) {
+                    usage = extracted;
+                  }
+
+                  const deltaText = parsed?.delta?.text;
+                  if (typeof deltaText === "string") {
+                    totalContentLength += deltaText.length;
+                  }
+                  const contentBlockText = parsed?.content_block?.text;
+                  if (typeof contentBlockText === "string") {
+                    totalContentLength += contentBlockText.length;
+                  }
+
+                  output = `data: ${JSON.stringify(parsed)}\n`;
+                  injectedUsage = true;
                 } else {
                   // Chat Completions: full sanitization pipeline
                   parsed = sanitizeStreamingChunk(parsed);
@@ -265,7 +287,7 @@ export function createSSEStream(options: StreamOptions = {}) {
           if (!parsed) continue;
 
           if (parsed && parsed.done) {
-            if (!doneSent) {
+            if (emitDoneForClient && !doneSent) {
               doneSent = true;
               const output = "data: [DONE]\n\n";
               reqLogger?.appendConvertedChunk?.(output);
@@ -372,9 +394,27 @@ export function createSSEStream(options: StreamOptions = {}) {
               controller.enqueue(encoder.encode(output));
             }
 
-            // Estimate usage if provider didn't return valid usage (PASSTHROUGH is always OpenAI format)
-            if (!hasValidUsage(usage) && totalContentLength > 0) {
-              usage = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+            // Estimate/fill output usage if provider didn't return it.
+            if (totalContentLength > 0) {
+              const usageOut =
+                usage?.completion_tokens ?? usage?.output_tokens ?? usage?.total_output_tokens ?? 0;
+              if (!hasValidUsage(usage) || usageOut <= 0) {
+                const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+                const usageIn =
+                  usage?.prompt_tokens ??
+                  usage?.input_tokens ??
+                  usage?.total_input_tokens ??
+                  estimated?.prompt_tokens ??
+                  0;
+                const mergedOut = Math.max(usageOut || 0, estimated?.completion_tokens || 0);
+                usage = {
+                  ...(usage && typeof usage === "object" ? usage : {}),
+                  prompt_tokens: usageIn,
+                  completion_tokens: mergedOut,
+                  total_tokens: usageIn + mergedOut,
+                  estimated: true,
+                };
+              }
             }
 
             if (hasValidUsage(usage)) {
@@ -446,8 +486,9 @@ export function createSSEStream(options: StreamOptions = {}) {
            * emitted once at stream end when merged into the final translated chunk.
            */
 
-          // Send [DONE] (only if not already sent during transform)
-          if (!doneSent) {
+          // Anthropic/Claude streams end with message_stop + connection close (no [DONE]).
+          // Sending [DONE] can cause Claude clients to abort before terminal events flush.
+          if (emitDoneForClient && !doneSent) {
             doneSent = true;
             const doneOutput = "data: [DONE]\n\n";
             reqLogger?.appendConvertedChunk?.(doneOutput);

@@ -115,7 +115,6 @@ export function createStreamController({
  */
 export function createDisconnectAwareStream(transformStream, streamController) {
   const reader = transformStream.readable.getReader();
-  const writer = transformStream.writable.getWriter();
 
   return new ReadableStream({
     async pull(controller) {
@@ -131,8 +130,15 @@ export function createDisconnectAwareStream(transformStream, streamController) {
           controller.close();
           return;
         }
+        if (!streamController.isConnected()) {
+          controller.close();
+          return;
+        }
         controller.enqueue(value);
       } catch (error) {
+        if (!streamController.isConnected()) {
+          return;
+        }
         streamController.handleError(error);
         controller.error(error);
       }
@@ -140,8 +146,7 @@ export function createDisconnectAwareStream(transformStream, streamController) {
 
     cancel(reason) {
       streamController.handleDisconnect(reason || "cancelled");
-      reader.cancel();
-      writer.abort();
+      void reader.cancel(reason).catch(() => {});
     },
   });
 }

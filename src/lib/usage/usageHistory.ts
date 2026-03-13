@@ -139,9 +139,20 @@ export async function saveRequestUsage(entry: any) {
       entry.connectionId || null,
       entry.apiKeyId || null,
       entry.apiKeyName || null,
-      entry.tokens?.input ?? entry.tokens?.prompt_tokens ?? 0,
-      entry.tokens?.output ?? entry.tokens?.completion_tokens ?? 0,
-      entry.tokens?.cacheRead ?? entry.tokens?.cached_tokens ?? 0,
+      entry.tokens?.input ??
+        entry.tokens?.prompt_tokens ??
+        entry.tokens?.input_tokens ??
+        entry.tokens?.in ??
+        0,
+      entry.tokens?.output ??
+        entry.tokens?.completion_tokens ??
+        entry.tokens?.output_tokens ??
+        entry.tokens?.out ??
+        0,
+      entry.tokens?.cacheRead ??
+        entry.tokens?.cached_tokens ??
+        entry.tokens?.cache_read_input_tokens ??
+        0,
       entry.tokens?.cacheCreation ?? entry.tokens?.cache_creation_input_tokens ?? 0,
       entry.tokens?.reasoning ?? entry.tokens?.reasoning_tokens ?? 0,
       entry.status || null,
@@ -262,13 +273,21 @@ export async function appendRequestLog({
         ? tokens.input
         : tokens?.prompt_tokens !== undefined
           ? tokens.prompt_tokens
-          : "-";
+          : tokens?.input_tokens !== undefined
+            ? tokens.input_tokens
+            : tokens?.in !== undefined
+              ? tokens.in
+              : "-";
     const received =
       tokens?.output !== undefined
         ? tokens.output
         : tokens?.completion_tokens !== undefined
           ? tokens.completion_tokens
-          : "-";
+          : tokens?.output_tokens !== undefined
+            ? tokens.output_tokens
+            : tokens?.out !== undefined
+              ? tokens.out
+              : "-";
 
     const line = `${timestamp} | ${m} | ${p} | ${account} | ${sent} | ${received} | ${status}\n`;
     fs.appendFileSync(LOG_FILE, line);

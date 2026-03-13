@@ -140,20 +140,24 @@ export function openaiToClaudeResponse(chunk, state) {
   if (delta?.tool_calls) {
     for (const tc of delta.tool_calls) {
       const idx = tc.index ?? 0;
+      let toolInfo = state.toolCalls.get(idx);
 
-      if (tc.id) {
+      if (!toolInfo) {
         stopThinkingBlock(state, results);
         stopTextBlock(state, results);
 
         const toolBlockIndex = state.nextBlockIndex++;
-        state.toolCalls.set(idx, {
-          id: tc.id,
-          name: tc.function?.name || "",
+        const toolId = tc.id || `toolu_${Date.now()}_${idx}`;
+        const toolNameRaw = tc.function?.name || "placeholder_tool";
+        toolInfo = {
+          id: toolId,
+          name: toolNameRaw,
           blockIndex: toolBlockIndex,
-        });
+        };
+        state.toolCalls.set(idx, toolInfo);
 
         // Strip prefix from tool name for response
-        let toolName = tc.function?.name || "";
+        let toolName = toolNameRaw;
         if (toolName.startsWith(CLAUDE_OAUTH_TOOL_PREFIX)) {
           toolName = toolName.slice(CLAUDE_OAUTH_TOOL_PREFIX.length);
         }
@@ -163,15 +167,19 @@ export function openaiToClaudeResponse(chunk, state) {
           index: toolBlockIndex,
           content_block: {
             type: "tool_use",
-            id: tc.id,
+            id: toolId,
             name: toolName,
             input: {},
           },
         });
       }
 
+      // Keep latest non-empty function name for this tool index
+      if (toolInfo && tc.function?.name) {
+        toolInfo.name = tc.function.name;
+      }
+
       if (tc.function?.arguments) {
-        const toolInfo = state.toolCalls.get(idx);
         if (toolInfo) {
           results.push({
             type: "content_block_delta",

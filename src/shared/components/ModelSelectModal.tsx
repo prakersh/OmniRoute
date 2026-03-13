@@ -90,13 +90,39 @@ export default function ModelSelectModal({
   const groupedModels = useMemo(() => {
     const groups: Record<string, any> = {};
 
-    // Get all active provider IDs from connections
-    const activeConnectionIds = activeProviders.map((p) => p.provider);
+    // Get all active provider IDs from connections.
+    // Some records can carry node prefix instead of node id (legacy rows),
+    // so normalize against providerNodes when possible.
+    const activeConnectionIds = activeProviders
+      .map((p) =>
+        typeof p?.provider === "string" ? p.provider : typeof p?.id === "string" ? p.id : null
+      )
+      .filter((id): id is string => !!id);
 
-    // Only show connected providers (including both standard and custom)
-    const providerIdsToShow = new Set([
-      ...activeConnectionIds, // Only connected providers
-    ]);
+    const normalizedActiveIds = activeConnectionIds.map((id) => {
+      const matchedNode = providerNodes.find((node) => node.id === id || node.prefix === id);
+      return matchedNode?.id || id;
+    });
+
+    // Ensure API-key compatible provider nodes with imported/aliased models
+    // show up even when the connections payload is stale or id/prefix-mismatched.
+    const compatibleProviderIdsFromNodes = providerNodes
+      .filter((node) => {
+        const nodeId = typeof node?.id === "string" ? node.id : "";
+        if (!nodeId) return false;
+        if (!isOpenAICompatibleProvider(nodeId) && !isAnthropicCompatibleProvider(nodeId)) {
+          return false;
+        }
+        const imported = Array.isArray(customModels?.[nodeId]) && customModels[nodeId].length > 0;
+        const aliased = Object.values(modelAliases as Record<string, string>).some(
+          (fullModel) => typeof fullModel === "string" && fullModel.startsWith(`${nodeId}/`)
+        );
+        return imported || aliased;
+      })
+      .map((node) => node.id);
+
+    // Show connected providers + discovered compatible providers.
+    const providerIdsToShow = new Set([...normalizedActiveIds, ...compatibleProviderIdsFromNodes]);
 
     // Sort by PROVIDER_ORDER
     const sortedProviderIds = [...providerIdsToShow].sort((a, b) => {
@@ -147,17 +173,31 @@ export default function ModelSelectModal({
           };
         }
       } else if (isCustomProvider) {
-        const matchedNode = providerNodes.find((node) => node.id === providerId);
+        const matchedNode = providerNodes.find(
+          (node) => node.id === providerId || node.prefix === providerId
+        );
         const displayName = matchedNode?.name || providerInfo.name;
         const nodePrefix = matchedNode?.prefix || providerId; // Consider a more user-friendly fallback if providerId is a UUID
 
+        const prefixesToMatch = new Set(
+          [providerId, matchedNode?.id, matchedNode?.prefix].filter(
+            (prefix): prefix is string => !!prefix
+          )
+        );
         const nodeModels = Object.entries(modelAliases as Record<string, string>)
-          .filter(([, fullModel]: [string, string]) => fullModel.startsWith(`${providerId}/`))
-          .map(([aliasName, fullModel]: [string, string]) => ({
-            id: fullModel.replace(`${providerId}/`, ""),
-            name: aliasName,
-            value: `${nodePrefix}/${fullModel.replace(`${providerId}/`, "")}`,
-          }));
+          .filter(([, fullModel]: [string, string]) =>
+            [...prefixesToMatch].some((prefix) => fullModel.startsWith(`${prefix}/`))
+          )
+          .map(([aliasName, fullModel]: [string, string]) => {
+            const modelId = fullModel.includes("/")
+              ? fullModel.split("/").slice(1).join("/")
+              : fullModel;
+            return {
+              id: modelId,
+              name: aliasName,
+              value: `${nodePrefix}/${modelId}`,
+            };
+          });
 
         // Merge custom models for custom providers
         const customEntries = providerCustomModels

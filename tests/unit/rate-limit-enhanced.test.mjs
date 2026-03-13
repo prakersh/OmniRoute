@@ -104,6 +104,8 @@ test("classifyError: text overrides status code", () => {
 test("classifyErrorText: handles various patterns", () => {
   assert.equal(classifyErrorText("rate limit reached"), RateLimitReason.RATE_LIMIT_EXCEEDED);
   assert.equal(classifyErrorText("too many requests"), RateLimitReason.RATE_LIMIT_EXCEEDED);
+  assert.equal(classifyErrorText("insufficient_quota"), RateLimitReason.QUOTA_EXHAUSTED);
+  assert.equal(classifyErrorText("usage limit reached"), RateLimitReason.QUOTA_EXHAUSTED);
   assert.equal(classifyErrorText("capacity exceeded"), RateLimitReason.MODEL_CAPACITY);
   assert.equal(classifyErrorText("overloaded"), RateLimitReason.MODEL_CAPACITY);
   assert.equal(classifyErrorText("unauthorized"), RateLimitReason.AUTH_ERROR);
@@ -156,6 +158,16 @@ test("checkFallbackError: backward compatible without model param", () => {
 test("checkFallbackError: 400 does not trigger fallback", () => {
   const result = checkFallbackError(400, "bad request");
   assert.equal(result.shouldFallback, false);
+});
+
+test("checkFallbackError: 400 usage-limit text still triggers fallback", () => {
+  const result = checkFallbackError(
+    400,
+    "You have reached your usage limit for this billing period.",
+    0
+  );
+  assert.equal(result.shouldFallback, true);
+  assert.equal(result.reason, RateLimitReason.QUOTA_EXHAUSTED);
 });
 
 test("checkFallbackError: server error has reason", () => {

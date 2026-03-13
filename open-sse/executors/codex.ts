@@ -13,6 +13,7 @@ type EffortLevel = (typeof EFFORT_ORDER)[number];
  * Update this table when Codex releases new models with different caps.
  */
 const MAX_EFFORT_BY_MODEL: Record<string, EffortLevel> = {
+  "gpt-5.4": "xhigh",
   "gpt-5.3-codex": "xhigh",
   "gpt-5.2-codex": "xhigh",
   "gpt-5.1-codex-max": "xhigh",

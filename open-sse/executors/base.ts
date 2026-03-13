@@ -1,4 +1,4 @@
-import { HTTP_STATUS, FETCH_TIMEOUT_MS } from "../config/constants.ts";
+import { HTTP_STATUS, FETCH_TIMEOUT_MS, STREAM_CONNECT_TIMEOUT_MS } from "../config/constants.ts";
 import { applyFingerprint, isCliCompatEnabled } from "../config/cliFingerprints.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -207,15 +207,42 @@ export class BaseExecutor {
       }
 
       const transformedBody = this.transformRequest(model, body, stream, credentials);
+      let connectTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+      let connectTimeoutController: AbortController | null = null;
 
       try {
-        // For non-streaming requests, apply a fetch timeout to prevent stalled connections.
-        // Streaming requests skip the timeout — they use stream idle detection instead.
-        const timeoutSignal = !stream ? AbortSignal.timeout(FETCH_TIMEOUT_MS) : null;
-        const combinedSignal =
-          signal && timeoutSignal
-            ? mergeAbortSignals(signal, timeoutSignal)
-            : signal || timeoutSignal;
+        // Apply timeout strategy:
+        // - non-streaming: full request timeout
+        // - streaming: ONLY connect/start timeout (until response headers arrive)
+        //   Never keep a hard timeout signal attached for the entire stream body.
+        let combinedSignal: AbortSignal | undefined;
+
+        if (stream) {
+          if (STREAM_CONNECT_TIMEOUT_MS > 0) {
+            connectTimeoutController = new AbortController();
+            connectTimeoutHandle = setTimeout(() => {
+              if (!connectTimeoutController?.signal.aborted) {
+                const timeoutError = new Error(
+                  `Stream connect timeout after ${STREAM_CONNECT_TIMEOUT_MS}ms`
+                );
+                timeoutError.name = "TimeoutError";
+                connectTimeoutController.abort(timeoutError);
+              }
+            }, STREAM_CONNECT_TIMEOUT_MS);
+          }
+
+          const timeoutSignal = connectTimeoutController?.signal;
+          combinedSignal =
+            signal && timeoutSignal
+              ? mergeAbortSignals(signal, timeoutSignal)
+              : signal || timeoutSignal || undefined;
+        } else {
+          const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+          combinedSignal =
+            signal && timeoutSignal
+              ? mergeAbortSignals(signal, timeoutSignal)
+              : signal || timeoutSignal;
+        }
 
         // Apply CLI fingerprint ordering if enabled for this provider
         let finalHeaders = headers;
@@ -236,6 +263,11 @@ export class BaseExecutor {
 
         const response = await fetch(url, fetchOptions);
 
+        if (connectTimeoutHandle) {
+          clearTimeout(connectTimeoutHandle);
+          connectTimeoutHandle = null;
+        }
+
         if (this.shouldRetry(response.status, urlIndex)) {
           log?.debug?.("RETRY", `${response.status} on ${url}, trying fallback ${urlIndex + 1}`);
           lastStatus = response.status;
@@ -244,10 +276,15 @@ export class BaseExecutor {
 
         return { response, url, headers, transformedBody };
       } catch (error) {
+        if (connectTimeoutHandle) {
+          clearTimeout(connectTimeoutHandle);
+          connectTimeoutHandle = null;
+        }
         // Distinguish timeout errors from other abort errors
         const err = error instanceof Error ? error : new Error(String(error));
         if (err.name === "TimeoutError") {
-          log?.warn?.("TIMEOUT", `Fetch timeout after ${FETCH_TIMEOUT_MS}ms on ${url}`);
+          const timeoutMs = stream ? STREAM_CONNECT_TIMEOUT_MS : FETCH_TIMEOUT_MS;
+          log?.warn?.("TIMEOUT", `Fetch timeout after ${timeoutMs}ms on ${url}`);
         }
         lastError = err;
         if (urlIndex + 1 < fallbackCount) {

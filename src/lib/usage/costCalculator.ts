@@ -24,6 +24,35 @@ function normalizeModelName(model) {
   return parts[parts.length - 1];
 }
 
+function addCandidate(candidates: string[], candidate: unknown) {
+  if (typeof candidate !== "string" || candidate.trim().length === 0) return;
+  if (!candidates.includes(candidate)) candidates.push(candidate);
+}
+
+function buildPricingModelCandidates(model: string): string[] {
+  const candidates: string[] = [];
+  addCandidate(candidates, model);
+
+  const normalized = normalizeModelName(model);
+  addCandidate(candidates, normalized);
+
+  const stripPrioritySuffix = (value: string) =>
+    value.replace(/-(xhigh|high|medium|low|none)$/i, "");
+
+  const withPriorityStripped = stripPrioritySuffix(normalized);
+  addCandidate(candidates, withPriorityStripped);
+
+  // Family-level fallback for new GPT-5 variants not yet in static pricing table.
+  if (/^gpt-5\.\d+-codex/i.test(withPriorityStripped)) {
+    addCandidate(candidates, "gpt-5.2-codex");
+    addCandidate(candidates, "gpt-5-codex");
+  } else if (/^gpt-5\.\d+/i.test(withPriorityStripped)) {
+    addCandidate(candidates, "gpt-5.2");
+  }
+
+  return candidates;
+}
+
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -47,12 +76,11 @@ export async function calculateCost(provider, model, tokens) {
   try {
     const { getPricingForModel } = await import("@/lib/localDb");
 
-    // Try exact match first, then normalized model name
-    let pricing = await getPricingForModel(provider, model);
-    if (!pricing) {
-      const normalized = normalizeModelName(model);
-      if (normalized !== model) {
-        pricing = await getPricingForModel(provider, normalized);
+    let pricing = null;
+    for (const candidate of buildPricingModelCandidates(model)) {
+      pricing = await getPricingForModel(provider, candidate);
+      if (pricing) {
+        break;
       }
     }
     if (!pricing) return 0;

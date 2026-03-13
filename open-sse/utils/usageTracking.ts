@@ -198,6 +198,20 @@ export function extractUsage(chunk) {
     });
   }
 
+  // Claude-like usage object without type (can happen after intermediary transforms)
+  if (
+    chunk.usage &&
+    typeof chunk.usage === "object" &&
+    (chunk.usage.input_tokens !== undefined || chunk.usage.output_tokens !== undefined)
+  ) {
+    return normalizeUsage({
+      prompt_tokens: chunk.usage.input_tokens || 0,
+      completion_tokens: chunk.usage.output_tokens || 0,
+      cache_read_input_tokens: chunk.usage.cache_read_input_tokens,
+      cache_creation_input_tokens: chunk.usage.cache_creation_input_tokens,
+    });
+  }
+
   // OpenAI Responses API format (response.completed or response.done)
   if (
     (chunk.type === "response.completed" || chunk.type === "response.done") &&

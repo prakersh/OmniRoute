@@ -307,9 +307,9 @@ export default function CombosPage() {
 
       if (combosRes.ok) setCombos(combosData.combos || []);
       if (providersRes.ok) {
-        const active = (providersData.connections || []).filter(
-          (c) => c.testStatus === "active" || c.testStatus === "success"
-        );
+        // Show all enabled connections in model selection, including API-key and
+        // compatible providers that may still have testStatus="unknown".
+        const active = (providersData.connections || []).filter((c) => c.isActive !== false);
         setActiveProviders(active);
       }
       if (metricsRes.ok) setMetrics(metricsData.metrics || {});

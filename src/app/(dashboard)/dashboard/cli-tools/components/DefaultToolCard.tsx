@@ -20,7 +20,21 @@ export default function DefaultToolCard({
   const translateOrFallback = useCallback(
     (key, fallback, values = undefined) => {
       try {
-        return t(key, values);
+        const translated = t(key, values);
+        if (typeof translated === "string") {
+          const normalized = translated.trim();
+          if (
+            normalized === key ||
+            normalized === `cliTools.${key}` ||
+            (normalized.startsWith("cliTools.") && normalized.endsWith(key))
+          ) {
+            return fallback;
+          }
+        }
+        if (translated == null || translated === "") {
+          return fallback;
+        }
+        return translated;
       } catch {
         return fallback;
       }
@@ -75,8 +89,32 @@ export default function DefaultToolCard({
 
     runtimeFetchStartedRef.current = true;
     fetch(`/api/cli-tools/runtime/${toolId}`)
-      .then((res) => res.json())
-      .then((data) => setRuntimeStatus(data))
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            setRuntimeStatus({
+              installed: false,
+              runnable: false,
+              command: null,
+              commandPath: null,
+              reason: "auth_required",
+            });
+            return;
+          }
+          const errText =
+            typeof data?.error === "string"
+              ? data.error
+              : typeof data?.error?.message === "string"
+                ? data.error.message
+                : typeof data?.message === "string"
+                  ? data.message
+                  : t("runtimeCheckFailed");
+          setRuntimeStatus({ error: errText });
+          return;
+        }
+        setRuntimeStatus(data);
+      })
       .catch((error) => setRuntimeStatus({ error: error?.message || t("runtimeCheckFailed") }));
   }, [isExpanded, runtimeStatus, toolId]);
 

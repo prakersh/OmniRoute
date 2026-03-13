@@ -743,24 +743,13 @@ export function MostActiveDay7d({ activityMap }) {
     if (!peakKey || peakVal === 0) return null;
 
     const peakDate = new Date(peakKey + "T12:00:00");
-    const weekdays = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-    const months = [
-      "jan",
-      "fev",
-      "mar",
-      "abr",
-      "mai",
-      "jun",
-      "jul",
-      "ago",
-      "set",
-      "out",
-      "nov",
-      "dez",
-    ];
+    const weekday = new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(peakDate);
+    const label = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(
+      peakDate
+    );
     return {
-      weekday: weekdays[peakDate.getDay()],
-      label: `${peakDate.getDate()} de ${months[peakDate.getMonth()]}`,
+      weekday,
+      label,
       tokens: peakVal,
     };
   }, [activityMap]);
@@ -784,7 +773,7 @@ export function MostActiveDay7d({ activityMap }) {
         </>
       ) : (
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Sem dados nos últimos 7 dias
+          No data in the last 7 days
         </span>
       )}
     </Card>
@@ -806,8 +795,10 @@ export function WeeklySquares7d({ activityMap }) {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const val = activityMap[key] || 0;
       if (val > maxVal) maxVal = val;
-      const shortDays = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
-      result.push({ key, val, label: shortDays[d.getDay()] });
+      const label = new Intl.DateTimeFormat(undefined, { weekday: "short" })
+        .format(d)
+        .toUpperCase();
+      result.push({ key, val, label });
     }
     return result.map((d) => ({ ...d, intensity: maxVal > 0 ? d.val / maxVal : 0 }));
   }, [activityMap]);

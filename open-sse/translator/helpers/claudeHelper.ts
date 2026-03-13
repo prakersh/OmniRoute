@@ -1,6 +1,4 @@
 // Claude helper functions for translator
-import { DEFAULT_THINKING_CLAUDE_SIGNATURE } from "../../config/defaultThinkingSignature.ts";
-
 // Check if message has valid non-empty content
 export function hasValidContent(msg) {
   if (typeof msg.content === "string" && msg.content.trim()) return true;
@@ -112,11 +110,24 @@ export function prepareClaudeRequest(body, provider = null) {
     for (let i = 0; i < len; i++) {
       const msg = body.messages[i];
 
-      // Remove cache_control from content blocks
+      // Remove cache_control from content blocks.
+      // Also drop historical thinking blocks so hidden CoT does not leak across turns.
       if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
+        msg.content = msg.content.filter((block) => {
           delete block.cache_control;
-        }
+          if (msg.role === "assistant") {
+            return block.type !== "thinking" && block.type !== "redacted_thinking";
+          }
+          return true;
+        });
+      }
+
+      // Strip XML-style thinking tags from assistant string content (defensive)
+      if (msg.role === "assistant" && typeof msg.content === "string") {
+        msg.content = msg.content
+          .replace(/<thinking>[\s\S]*?<\/thinking>/g, "")
+          .replace(/<antThinking>[\s\S]*?<\/antThinking>/g, "")
+          .trim();
       }
 
       // Keep final assistant even if empty, otherwise check valid content
@@ -151,12 +162,7 @@ export function prepareClaudeRequest(body, provider = null) {
 
     body.messages = filtered;
 
-    // Check if thinking is enabled AND last message is from user
-    const lastMessage = filtered[filtered.length - 1];
-    const lastMessageIsUser = lastMessage?.role === "user";
-    const thinkingEnabled = body.thinking?.type === "enabled" && lastMessageIsUser;
-
-    // Pass 2 (reverse): add cache_control to last assistant + handle thinking for Anthropic
+    // Pass 2 (reverse): add cache_control to last assistant
     let lastAssistantProcessed = false;
     for (let i = filtered.length - 1; i >= 0; i--) {
       const msg = filtered[i];
@@ -166,30 +172,6 @@ export function prepareClaudeRequest(body, provider = null) {
         if (!lastAssistantProcessed && msg.content.length > 0) {
           msg.content[msg.content.length - 1].cache_control = { type: "ephemeral" };
           lastAssistantProcessed = true;
-        }
-
-        // Handle thinking blocks for Anthropic endpoints (native + compatible)
-        if (provider === "claude" || provider?.startsWith?.("anthropic-compatible-")) {
-          let hasToolUse = false;
-          let hasThinking = false;
-
-          // Always replace signature for all thinking blocks
-          for (const block of msg.content) {
-            if (block.type === "thinking" || block.type === "redacted_thinking") {
-              block.signature = DEFAULT_THINKING_CLAUDE_SIGNATURE;
-              hasThinking = true;
-            }
-            if (block.type === "tool_use") hasToolUse = true;
-          }
-
-          // Add thinking block if thinking enabled + has tool_use but no thinking
-          if (thinkingEnabled && !hasThinking && hasToolUse) {
-            msg.content.unshift({
-              type: "thinking",
-              thinking: ".",
-              signature: DEFAULT_THINKING_CLAUDE_SIGNATURE,
-            });
-          }
         }
       }
     }
