@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "./Card";
 import { CardSkeleton } from "./Loading";
 import { fmtCompact as fmt, fmtFull, fmtCost } from "@/shared/utils/formatting";
+import { formatApiKeyLabel } from "@/shared/utils/formatting";
 import {
   StatCard,
   ActivityHeatmap,
@@ -25,6 +26,8 @@ import {
 
 export default function UsageAnalytics() {
   const [range, setRange] = useState("30d");
+  const [selectedApiKey, setSelectedApiKey] = useState("");
+  const [apiKeyOptions, setApiKeyOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,17 +35,29 @@ export default function UsageAnalytics() {
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/usage/analytics?range=${range}`);
+      const params = new URLSearchParams({ range });
+      if (selectedApiKey) params.set("apiKey", selectedApiKey);
+      const res = await fetch(`/api/usage/analytics?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setAnalytics(data);
+      setApiKeyOptions((prev) => {
+        const next = new Map(prev.map((item) => [item.value, item]));
+        for (const row of data?.byApiKey || []) {
+          const value = (row?.apiKeyId || row?.apiKeyName || "").toString().trim();
+          if (!value) continue;
+          const label = formatApiKeyLabel(row.apiKeyName, row.apiKeyId);
+          next.set(value, { value, label });
+        }
+        return Array.from(next.values()).sort((a, b) => a.label.localeCompare(b.label));
+      });
       setError(null);
     } catch (err) {
       setError((err as any).message);
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, selectedApiKey]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -91,25 +106,41 @@ export default function UsageAnalytics() {
   return (
     <div className="flex flex-col gap-5">
       {/* Header + Time Range */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-[22px]">analytics</span>
           Usage Analytics
         </h2>
-        <div className="flex items-center gap-1 bg-black/[0.03] dark:bg-white/[0.03] rounded-lg p-1 border border-black/5 dark:border-white/5">
-          {ranges.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                range === r.value
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedApiKey}
+            onChange={(e) => setSelectedApiKey(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-bg-subtle border border-border text-xs text-text-primary focus:outline-none focus:border-primary appearance-none cursor-pointer min-w-[180px]"
+            title="Filter by API key"
+          >
+            <option value="">All API Keys</option>
+            {apiKeyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-1 bg-black/[0.03] dark:bg-white/[0.03] rounded-lg p-1 border border-black/5 dark:border-white/5">
+            {ranges.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRange(r.value)}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  range === r.value
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

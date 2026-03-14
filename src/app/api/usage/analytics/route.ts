@@ -6,9 +6,26 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") || "30d";
+    const apiKey = (searchParams.get("apiKey") || "").trim();
 
     const db = await getUsageDb();
     const history = db.data.history || [];
+
+    const filteredHistory = apiKey
+      ? history.filter((entry) => {
+          if (!entry || typeof entry !== "object") return false;
+          const apiKeyId =
+            typeof entry.apiKeyId === "string" && entry.apiKeyId.trim().length > 0
+              ? entry.apiKeyId.trim()
+              : "";
+          const apiKeyName =
+            typeof entry.apiKeyName === "string" && entry.apiKeyName.trim().length > 0
+              ? entry.apiKeyName.trim()
+              : "";
+          const keyLabel = apiKeyId ? `${apiKeyName || apiKeyId} (${apiKeyId})` : apiKeyName;
+          return apiKeyId === apiKey || apiKeyName === apiKey || keyLabel === apiKey;
+        })
+      : history;
 
     // Build connection map for account names
     const { getProviderConnections } = await import("@/lib/localDb");
@@ -34,7 +51,7 @@ export async function GET(request) {
       /* ignore */
     }
 
-    const analytics = await computeAnalytics(history, range, connectionMap);
+    const analytics = await computeAnalytics(filteredHistory, range, connectionMap);
 
     return NextResponse.json(analytics);
   } catch (error) {
