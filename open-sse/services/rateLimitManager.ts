@@ -347,6 +347,10 @@ export async function withRateLimit(provider, connectionId, model, fn) {
         : new Error("Unknown error");
     const errorMessage =
       outcomeError && typeof outcomeError.message === "string" ? outcomeError.message : "";
+    const errorCode =
+      outcomeError && typeof outcomeError === "object" && "code" in outcomeError
+        ? (outcomeError as { code?: string }).code
+        : undefined;
     if (errorMessage.includes("dropped by Bottleneck")) {
       const nowCounts = limiter.counts();
       console.warn(
@@ -361,10 +365,12 @@ export async function withRateLimit(provider, connectionId, model, fn) {
       );
     }
 
-    const nowCounts = limiter.counts();
-    console.warn(
-      `⌛ [RATE-LIMIT] ${key} — queue wait exceeded ${MAX_WAIT_MS}ms (queued=${nowCounts.QUEUED || 0}, running=${nowCounts.RUNNING || 0})`
-    );
+    if (errorCode === "RATE_LIMIT_QUEUE_TIMEOUT") {
+      const nowCounts = limiter.counts();
+      console.warn(
+        `⌛ [RATE-LIMIT] ${key} — queue wait exceeded ${MAX_WAIT_MS}ms (queued=${nowCounts.QUEUED || 0}, running=${nowCounts.RUNNING || 0})`
+      );
+    }
     throw outcomeError;
   }
 

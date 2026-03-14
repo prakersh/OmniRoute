@@ -24,6 +24,53 @@ function normalizeModelName(model) {
   return parts[parts.length - 1];
 }
 
+function normalizeModelTier(model: string): string {
+  if (!model) return model;
+  return model.replace(/-(xhigh|high|low|none)$/i, "");
+}
+
+function buildModelCandidates(model: string): string[] {
+  const candidates = new Set<string>();
+  const base = normalizeModelName(model);
+  const tierNormalized = normalizeModelTier(base);
+  const rawTierNormalized = normalizeModelTier(model);
+
+  if (model) candidates.add(model);
+  if (base) candidates.add(base);
+  if (tierNormalized) candidates.add(tierNormalized);
+  if (rawTierNormalized) candidates.add(rawTierNormalized);
+
+  // Legacy temporary alias used in some pricing payloads.
+  if (base === "gpt-5.4") candidates.add("gpt5.4");
+  if (base === "gpt5.4") candidates.add("gpt-5.4");
+
+  return [...candidates];
+}
+
+function buildProviderCandidates(provider: string): string[] {
+  const candidates = new Set<string>();
+  if (provider) candidates.add(provider);
+
+  // Common regional suffix normalization.
+  if (provider?.endsWith("-cn")) {
+    candidates.add(provider.replace(/-cn$/, ""));
+  }
+
+  // Dynamic custom provider IDs should still map to baseline pricing families.
+  if (provider?.startsWith("anthropic-compatible-")) {
+    candidates.add("anthropic");
+    candidates.add("cc");
+    candidates.add("kiro");
+  }
+  if (provider?.startsWith("openai-compatible-")) {
+    candidates.add("openai");
+    candidates.add("cx");
+    candidates.add("codex");
+  }
+
+  return [...candidates];
+}
+
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -47,14 +94,18 @@ export async function calculateCost(provider, model, tokens) {
   try {
     const { getPricingForModel } = await import("@/lib/localDb");
 
-    // Try exact match first, then normalized model name
-    let pricing = await getPricingForModel(provider, model);
-    if (!pricing) {
-      const normalized = normalizeModelName(model);
-      if (normalized !== model) {
-        pricing = await getPricingForModel(provider, normalized);
+    const providerCandidates = buildProviderCandidates(provider);
+    const modelCandidates = buildModelCandidates(model);
+
+    let pricing: unknown = null;
+    for (const providerCandidate of providerCandidates) {
+      for (const modelCandidate of modelCandidates) {
+        pricing = await getPricingForModel(providerCandidate, modelCandidate);
+        if (pricing) break;
       }
+      if (pricing) break;
     }
+
     if (!pricing) return 0;
 
     const pricingRecord =

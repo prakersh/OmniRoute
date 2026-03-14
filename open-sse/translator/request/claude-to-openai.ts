@@ -4,6 +4,7 @@ import { adjustMaxTokens } from "../helpers/maxTokensHelper.ts";
 
 type JsonRecord = Record<string, unknown>;
 const TOOL_CHOICE_ANY = ["a", "n", "y"].join("");
+const PLACEHOLDER_TOOL_NAME = "placeholder_tool";
 
 // Convert Claude request to OpenAI format
 export function claudeToOpenAIRequest(model, body, stream) {
@@ -60,6 +61,7 @@ export function claudeToOpenAIRequest(model, body, stream) {
 
   // Fix missing tool responses - OpenAI requires every tool_call to have a response
   fixMissingToolResponses(result.messages);
+  result.messages = dropOrphanToolResults(result.messages);
 
   // Tools
   if (body.tools && Array.isArray(body.tools)) {
@@ -117,6 +119,31 @@ function fixMissingToolResponses(messages) {
   }
 }
 
+// Drop tool_result messages that reference unknown tool_call ids.
+// This prevents provider-side 400s when client history contains orphaned tool results.
+function dropOrphanToolResults(messages) {
+  const knownToolCallIds = new Set();
+  const filtered = [];
+
+  for (const msg of messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      for (const toolCall of msg.tool_calls) {
+        if (toolCall?.id) {
+          knownToolCallIds.add(toolCall.id);
+        }
+      }
+    }
+
+    if (msg.role === "tool" && msg.tool_call_id && !knownToolCallIds.has(msg.tool_call_id)) {
+      continue;
+    }
+
+    filtered.push(msg);
+  }
+
+  return filtered;
+}
+
 // Convert single Claude message - returns single message or array of messages
 function convertClaudeMessage(msg) {
   const role = msg.role === "user" || msg.role === "tool" ? "user" : "assistant";
@@ -150,11 +177,17 @@ function convertClaudeMessage(msg) {
           break;
 
         case "tool_use":
+          // Preserve call linkage even when provider/client emits an empty tool name.
+          // Downstream Responses API rejects orphaned function_call_output entries.
+          const toolName =
+            typeof block.name === "string" && block.name.trim().length > 0
+              ? block.name
+              : PLACEHOLDER_TOOL_NAME;
           toolCalls.push({
             id: block.id,
             type: "function",
             function: {
-              name: block.name,
+              name: toolName,
               arguments: JSON.stringify(block.input || {}),
             },
           });

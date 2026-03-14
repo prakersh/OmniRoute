@@ -413,9 +413,10 @@ export async function handleComboChat({
         null,
         provider
       );
-      // Combo-level behavior differs from account-level fallback:
-      // a 400 from one model/provider can still succeed on downstream models.
-      const effectiveShouldFallback = shouldFallback || result.status === 400;
+      // Respect account-level fallback classification.
+      // Do not force fallback for all 400s because deterministic request-shape
+      // errors (e.g. missing tool call linkage) will fail across all models.
+      const effectiveShouldFallback = shouldFallback;
 
       // Record failure in circuit breaker for transient errors
       if (TRANSIENT_FOR_BREAKER.includes(result.status)) {
@@ -652,9 +653,10 @@ async function handleRoundRobinCombo({
           null,
           provider
         );
-        // Combo-level behavior differs from account-level fallback:
-        // a 400 from one model/provider can still succeed on downstream models.
-        const effectiveShouldFallback = shouldFallback || result.status === 400;
+        // Respect account-level fallback classification.
+        // Do not force fallback for all 400s because deterministic request-shape
+        // errors (e.g. missing tool call linkage) will fail across all models.
+        const effectiveShouldFallback = shouldFallback;
 
         // Transient errors → mark in semaphore AND record circuit breaker failure
         if (TRANSIENT_FOR_BREAKER.includes(result.status) && cooldownMs > 0) {

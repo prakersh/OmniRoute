@@ -40,6 +40,62 @@ export const DEFAULT_PRICING = {
       reasoning: 30.0,
       cache_creation: 5.0,
     },
+    "gpt-5.4": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.4-high": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.4-xhigh": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-xhigh": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-high": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-low": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-none": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
     "gpt-5.2-codex": {
       input: 5.0,
       output: 20.0,
@@ -70,6 +126,13 @@ export const DEFAULT_PRICING = {
       cache_creation: 4.0,
     },
     "gpt-5.1-codex-mini": {
+      input: 1.5,
+      output: 6.0,
+      cached: 0.75,
+      reasoning: 9.0,
+      cache_creation: 1.5,
+    },
+    "gpt-5.1-codex-mini-high": {
       input: 1.5,
       output: 6.0,
       cached: 0.75,
@@ -437,11 +500,32 @@ export const DEFAULT_PRICING = {
       reasoning: 15.0,
       cache_creation: 3.0,
     },
+    "claude-sonnet-4.5": {
+      input: 3.0,
+      output: 15.0,
+      cached: 1.5,
+      reasoning: 15.0,
+      cache_creation: 3.0,
+    },
     "claude-opus-4-20250514": {
       input: 15.0,
       output: 75.0,
       cached: 7.5,
       reasoning: 112.5,
+      cache_creation: 15.0,
+    },
+    "claude-opus-4.6": {
+      input: 15.0,
+      output: 75.0,
+      cached: 7.5,
+      reasoning: 75.0,
+      cache_creation: 15.0,
+    },
+    "claude-opus-4-6": {
+      input: 15.0,
+      output: 75.0,
+      cached: 7.5,
+      reasoning: 75.0,
       cache_creation: 15.0,
     },
     "claude-3-5-sonnet-20241022": {
@@ -535,6 +619,13 @@ export const DEFAULT_PRICING = {
   // MiniMax
   minimax: {
     "MiniMax-M2.1": {
+      input: 0.5,
+      output: 2.0,
+      cached: 0.25,
+      reasoning: 3.0,
+      cache_creation: 0.5,
+    },
+    "MiniMax-M2.5": {
       input: 0.5,
       output: 2.0,
       cached: 0.25,

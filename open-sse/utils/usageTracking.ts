@@ -17,8 +17,9 @@ export const COLORS = {
 
 /**
  * Safety buffer added to reported token usage to prevent clients from hitting
- * context window limits. 2000 tokens accounts for overhead from system prompts,
- * tool definitions, and format translation that may not be reflected in raw usage.
+ * context window limits for ESTIMATED usage.
+ * 2000 tokens accounts for overhead from system prompts, tool definitions,
+ * and format translation that may not be reflected in heuristic estimation.
  */
 const BUFFER_TOKENS = 2000;
 
@@ -41,6 +42,12 @@ export function addBufferToUsage(usage) {
   if (!usage || typeof usage !== "object") return usage;
 
   const result = { ...usage };
+
+  // Do not inflate provider-reported usage.
+  // Buffering is only for heuristic estimates where undercount risk is high.
+  if (result.estimated !== true) {
+    return result;
+  }
 
   // Claude format
   if (result.input_tokens !== undefined) {
@@ -205,6 +212,22 @@ export function extractUsage(chunk) {
     typeof chunk.response.usage === "object"
   ) {
     const usage = chunk.response.usage;
+    return normalizeUsage({
+      prompt_tokens: usage.input_tokens || usage.prompt_tokens || 0,
+      completion_tokens: usage.output_tokens || usage.completion_tokens || 0,
+      cached_tokens: usage.input_tokens_details?.cached_tokens,
+      reasoning_tokens: usage.output_tokens_details?.reasoning_tokens,
+    });
+  }
+
+  // OpenAI Responses API variant: usage can be top-level on completion events
+  if (
+    (chunk.type === "response.completed" || chunk.type === "response.done") &&
+    chunk.usage &&
+    typeof chunk.usage === "object" &&
+    (chunk.usage.input_tokens !== undefined || chunk.usage.output_tokens !== undefined)
+  ) {
+    const usage = chunk.usage;
     return normalizeUsage({
       prompt_tokens: usage.input_tokens || usage.prompt_tokens || 0,
       completion_tokens: usage.output_tokens || usage.completion_tokens || 0,

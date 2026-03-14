@@ -105,6 +105,7 @@ export function createSSEStream(options: StreamOptions = {}) {
 
   let buffer = "";
   let usage = null;
+  let passthroughUsageFormat = FORMATS.OPENAI;
 
   // State for translate mode
   const state: TranslateState | null =
@@ -185,6 +186,7 @@ export function createSSEStream(options: StreamOptions = {}) {
                   parsed.type.startsWith("response.");
 
                 if (isResponsesSSE) {
+                  passthroughUsageFormat = FORMATS.OPENAI_RESPONSES;
                   // Responses SSE: only extract usage, forward payload as-is
                   const extracted = extractUsage(parsed);
                   if (extracted) {
@@ -195,51 +197,79 @@ export function createSSEStream(options: StreamOptions = {}) {
                     totalContentLength += parsed.delta.length;
                   }
                 } else {
-                  // Chat Completions: full sanitization pipeline
-                  parsed = sanitizeStreamingChunk(parsed);
-
-                  const idFixed = fixInvalidId(parsed);
-
-                  if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
-                    continue;
-                  }
-
-                  const delta = parsed.choices?.[0]?.delta;
-
-                  // Extract <think> tags from streaming content
-                  if (delta?.content && typeof delta.content === "string") {
-                    const { content, thinking } = extractThinkingFromContent(delta.content);
-                    delta.content = content;
-                    if (thinking && !delta.reasoning_content) {
-                      delta.reasoning_content = thinking;
-                    }
-                  }
-
-                  const content = delta?.content || delta?.reasoning_content;
-                  if (content && typeof content === "string") {
-                    totalContentLength += content.length;
-                  }
-
+                  // Keep usage extraction and content tracking format-agnostic in passthrough mode.
                   const extracted = extractUsage(parsed);
                   if (extracted) {
                     usage = extracted;
                   }
 
-                  const isFinishChunk = parsed.choices?.[0]?.finish_reason;
-                  if (isFinishChunk && !hasValidUsage(parsed.usage)) {
-                    const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
-                    parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
-                    output = `data: ${JSON.stringify(parsed)}\n`;
-                    usage = estimated;
-                    injectedUsage = true;
-                  } else if (isFinishChunk && usage) {
-                    const buffered = addBufferToUsage(usage);
-                    parsed.usage = filterUsageForFormat(buffered, FORMATS.OPENAI);
-                    output = `data: ${JSON.stringify(parsed)}\n`;
-                    injectedUsage = true;
-                  } else if (idFixed) {
-                    output = `data: ${JSON.stringify(parsed)}\n`;
-                    injectedUsage = true;
+                  if (parsed.type && typeof parsed.type === "string") {
+                    passthroughUsageFormat = FORMATS.CLAUDE;
+                  } else if (parsed.usageMetadata || parsed.candidates?.[0]?.content?.parts) {
+                    passthroughUsageFormat = FORMATS.GEMINI;
+                  } else if (parsed.choices?.[0]?.delta) {
+                    passthroughUsageFormat = FORMATS.OPENAI;
+                  }
+
+                  // Claude content
+                  if (parsed.delta?.text && typeof parsed.delta.text === "string") {
+                    totalContentLength += parsed.delta.text.length;
+                  }
+                  if (parsed.delta?.thinking && typeof parsed.delta.thinking === "string") {
+                    totalContentLength += parsed.delta.thinking.length;
+                  }
+
+                  // Gemini content
+                  if (parsed.candidates?.[0]?.content?.parts) {
+                    for (const part of parsed.candidates[0].content.parts) {
+                      if (part?.text && typeof part.text === "string") {
+                        totalContentLength += part.text.length;
+                      }
+                    }
+                  }
+
+                  // OpenAI Chat Completions: keep sanitization and usage injection behavior.
+                  if (parsed.choices?.[0]?.delta || parsed.choices?.[0]?.finish_reason) {
+                    parsed = sanitizeStreamingChunk(parsed);
+
+                    const idFixed = fixInvalidId(parsed);
+
+                    if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
+                      continue;
+                    }
+
+                    const delta = parsed.choices?.[0]?.delta;
+
+                    // Extract <think> tags from streaming content
+                    if (delta?.content && typeof delta.content === "string") {
+                      const { content, thinking } = extractThinkingFromContent(delta.content);
+                      delta.content = content;
+                      if (thinking && !delta.reasoning_content) {
+                        delta.reasoning_content = thinking;
+                      }
+                    }
+
+                    const content = delta?.content || delta?.reasoning_content;
+                    if (content && typeof content === "string") {
+                      totalContentLength += content.length;
+                    }
+
+                    const isFinishChunk = parsed.choices?.[0]?.finish_reason;
+                    if (isFinishChunk && !hasValidUsage(parsed.usage)) {
+                      const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+                      parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
+                      output = `data: ${JSON.stringify(parsed)}\n`;
+                      usage = estimated;
+                      injectedUsage = true;
+                    } else if (isFinishChunk && usage) {
+                      const buffered = addBufferToUsage(usage);
+                      parsed.usage = filterUsageForFormat(buffered, FORMATS.OPENAI);
+                      output = `data: ${JSON.stringify(parsed)}\n`;
+                      injectedUsage = true;
+                    } else if (idFixed) {
+                      output = `data: ${JSON.stringify(parsed)}\n`;
+                      injectedUsage = true;
+                    }
                   }
                 }
               } catch {}
@@ -291,6 +321,16 @@ export function createSSEStream(options: StreamOptions = {}) {
           }
           if (parsed.choices?.[0]?.delta?.reasoning_content) {
             totalContentLength += parsed.choices[0].delta.reasoning_content.length;
+          }
+
+          // OpenAI Responses format (delta events like response.output_text.delta)
+          if (
+            typeof parsed.type === "string" &&
+            parsed.type.startsWith("response.") &&
+            parsed.type.endsWith(".delta") &&
+            typeof parsed.delta === "string"
+          ) {
+            totalContentLength += parsed.delta.length;
           }
 
           // Gemini format - may have multiple parts
@@ -372,9 +412,9 @@ export function createSSEStream(options: StreamOptions = {}) {
               controller.enqueue(encoder.encode(output));
             }
 
-            // Estimate usage if provider didn't return valid usage (PASSTHROUGH is always OpenAI format)
+            // Estimate usage if provider didn't return valid usage.
             if (!hasValidUsage(usage) && totalContentLength > 0) {
-              usage = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+              usage = estimateUsage(body, totalContentLength, passthroughUsageFormat);
             }
 
             if (hasValidUsage(usage)) {

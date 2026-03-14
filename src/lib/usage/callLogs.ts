@@ -47,6 +47,59 @@ function hasTruncatedFlag(value: unknown): boolean {
   return (value as Record<string, unknown>)._truncated === true;
 }
 
+function readTokenValue(tokenObj: JsonRecord, keys: string[]): number {
+  for (const key of keys) {
+    const value = tokenObj[key];
+    if (value !== undefined && value !== null) {
+      const numeric = toNumber(value);
+      if (numeric > 0) return numeric;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Normalize token pairs from mixed provider payloads.
+ * Supports OpenAI, Claude, Gemini and legacy flat payload shapes.
+ */
+function normalizeTokenPair(tokens: unknown): { input: number; output: number } {
+  const tokenObj = asRecord(tokens);
+  const usageObj = asRecord(tokenObj.usage);
+
+  // Check top-level first, then nested `usage` shape if present.
+  const sources = [tokenObj, usageObj];
+  let input = 0;
+  let output = 0;
+
+  for (const source of sources) {
+    if (!input) {
+      input = readTokenValue(source, [
+        "input",
+        "in",
+        "prompt_tokens",
+        "input_tokens",
+        "tokens_in",
+        "promptTokenCount",
+        "inputTokens",
+      ]);
+    }
+    if (!output) {
+      output = readTokenValue(source, [
+        "output",
+        "out",
+        "completion_tokens",
+        "output_tokens",
+        "tokens_out",
+        "candidatesTokenCount",
+        "outputTokens",
+      ]);
+    }
+    if (input && output) break;
+  }
+
+  return { input, output };
+}
+
 const CALL_LOGS_MAX = parseInt(process.env.CALL_LOGS_MAX || "200", 10);
 const LOG_RETENTION_DAYS = parseInt(process.env.LOG_RETENTION_DAYS || "7", 10);
 const CALL_LOG_PAYLOAD_MODE = (() => {
@@ -147,6 +200,7 @@ export async function saveCallLog(entry: any) {
 
     const protectedRequestBody = noLogEnabled ? null : protectPayloadForLog(entry.requestBody);
     const protectedResponseBody = noLogEnabled ? null : protectPayloadForLog(entry.responseBody);
+    const tokenPair = normalizeTokenPair(entry.tokens);
 
     // Resolve account name
     let account = entry.connectionId ? entry.connectionId.slice(0, 8) : "-";
@@ -184,8 +238,8 @@ export async function saveCallLog(entry: any) {
       account,
       connectionId: entry.connectionId || null,
       duration: entry.duration || 0,
-      tokensIn: entry.tokens?.prompt_tokens || 0,
-      tokensOut: entry.tokens?.completion_tokens || 0,
+      tokensIn: tokenPair.input,
+      tokensOut: tokenPair.output,
       sourceFormat: entry.sourceFormat || null,
       targetFormat: entry.targetFormat || null,
       apiKeyId,
@@ -293,10 +347,88 @@ export function rotateCallLogs() {
   }
 }
 
+/**
+ * Backfill missing token columns in call_logs from usage_history.
+ * This repairs historical zero-token rows in logs table where usage data
+ * exists but token columns were stored with an incompatible shape.
+ */
+function backfillCallLogTokenColumns() {
+  try {
+    const db = getDbInstance();
+    const candidates = db
+      .prepare(
+        `
+        SELECT id, timestamp, provider, model, connection_id
+        FROM call_logs
+        WHERE status >= 200 AND status < 300
+          AND COALESCE(tokens_in, 0) = 0
+          AND COALESCE(tokens_out, 0) = 0
+        ORDER BY timestamp DESC
+        LIMIT 5000
+      `
+      )
+      .all() as Array<Record<string, unknown>>;
+
+    if (candidates.length === 0) return;
+
+    const findUsage = db.prepare(
+      `
+      SELECT tokens_input, tokens_output
+      FROM usage_history
+      WHERE provider = @provider
+        AND model = @model
+        AND COALESCE(connection_id, '') = COALESCE(@connectionId, '')
+        AND ABS((julianday(timestamp) - julianday(@timestamp)) * 86400.0) <= 5
+      ORDER BY ABS((julianday(timestamp) - julianday(@timestamp)) * 86400.0) ASC
+      LIMIT 1
+    `
+    );
+    const updateTokens = db.prepare(
+      "UPDATE call_logs SET tokens_in = @tokensIn, tokens_out = @tokensOut WHERE id = @id"
+    );
+
+    let backfilled = 0;
+    const tx = db.transaction(() => {
+      for (const row of candidates) {
+        const id = toStringOrNull(row.id);
+        const timestamp = toStringOrNull(row.timestamp);
+        const provider = toStringOrNull(row.provider);
+        const model = toStringOrNull(row.model);
+        const connectionId = toStringOrNull(row.connection_id);
+
+        if (!id || !timestamp || !provider || !model) continue;
+
+        const usageRow = asRecord(
+          findUsage.get({
+            provider,
+            model,
+            connectionId,
+            timestamp,
+          })
+        );
+        const tokensIn = toNumber(usageRow.tokens_input);
+        const tokensOut = toNumber(usageRow.tokens_output);
+        if (tokensIn <= 0 && tokensOut <= 0) continue;
+
+        updateTokens.run({ id, tokensIn, tokensOut });
+        backfilled++;
+      }
+    });
+
+    tx();
+    if (backfilled > 0) {
+      console.log(`[callLogs] Backfilled token columns for ${backfilled} rows`);
+    }
+  } catch (error: any) {
+    console.error("[callLogs] Failed to backfill token columns:", error.message);
+  }
+}
+
 // Run rotation on startup
 if (shouldPersistToDisk) {
   try {
     rotateCallLogs();
+    backfillCallLogTokenColumns();
   } catch {}
 }
 
