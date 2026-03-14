@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE_HOST="${OMNI_REMOTE_HOST:-root@100.100.1.5}"
-REMOTE_DIR="${OMNI_REMOTE_DIR:-/root/OmniRoute-src}"
+REMOTE_DIR="${OMNI_REMOTE_DIR:-/root/omni-remote}"
 COMPOSE_PROFILE="${OMNI_COMPOSE_PROFILE:-base}"
 
 log() {
