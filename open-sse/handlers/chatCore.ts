@@ -41,6 +41,7 @@ import {
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from "@/lib/idempotencyLayer";
 import { createProgressTransform, wantsProgress } from "../utils/progressTracker.ts";
 import { isModelUnavailableError, getNextFamilyFallback } from "../services/modelFamilyFallback.ts";
+import { compressContext } from "../services/contextManager.ts";
 
 export async function ensureFirstStreamChunk(
   response: Response,
@@ -201,6 +202,18 @@ export async function handleChatCore({
   const alias = PROVIDER_ID_TO_ALIAS[provider] || provider;
   const modelTargetFormat = getModelTargetFormat(alias, resolvedModel);
   const targetFormat = modelTargetFormat || getTargetFormat(provider);
+
+  // Preflight context compression:
+  // Cloud clients (Claude/Codex) compact their own history, but translated/fallback
+  // requests can still overflow smaller downstream model windows.
+  // Apply server-side compression before translation/execution.
+  const compression = compressContext(body, { provider, model: resolvedModel });
+  if (compression.compressed) {
+    body = compression.body;
+    const original = compression.stats?.original ?? 0;
+    const final = compression.stats?.final ?? 0;
+    log?.info?.("CONTEXT", `${provider}/${resolvedModel} | compressed ${original}→${final} tokens`);
+  }
 
   // Default to false unless client explicitly sets stream: true (OpenAI spec compliant)
   const stream = body.stream === true;

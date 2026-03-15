@@ -28,8 +28,8 @@ sync_remote() {
     --exclude "node_modules" \
     --exclude ".next" \
     --exclude ".env" \
-    --exclude "data" \
-    --exclude "logs" \
+    --exclude "/data/" \
+    --exclude "/logs/" \
     --filter "P .env" \
     "${ROOT_DIR}/" "${REMOTE_HOST}:${REMOTE_DIR}/"
 }
