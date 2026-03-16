@@ -137,6 +137,10 @@ export function openaiResponsesToOpenAIRequest(
       const toolCalls = Array.isArray(currentAssistantMsg.tool_calls)
         ? currentAssistantMsg.tool_calls
         : [];
+      const fnName = toString(item.name);
+      if (!fnName || !fnName.trim()) {
+        continue;
+      }
       toolCalls.push({
         id: toString(item.call_id),
         type: "function",
@@ -205,6 +209,24 @@ export function openaiResponsesToOpenAIRequest(
       };
     });
   }
+
+  // Filter orphaned tool results (no matching tool_call in any assistant message)
+  const allToolCallIds = new Set<string>();
+  for (const m of messages) {
+    const rec = toRecord(m);
+    if (Array.isArray(rec.tool_calls)) {
+      for (const tc of rec.tool_calls as any[]) {
+        if (tc.id) allToolCallIds.add(String(tc.id));
+      }
+    }
+  }
+  result.messages = messages.filter((m) => {
+    const rec = toRecord(m);
+    if (rec.role === "tool" && rec.tool_call_id) {
+      return allToolCallIds.has(String(rec.tool_call_id));
+    }
+    return true;
+  });
 
   // Cleanup Responses API specific fields
   delete result.input;
@@ -324,10 +346,20 @@ export function openaiToOpenAIResponsesRequest(
         for (const toolCallValue of msg.tool_calls) {
           const toolCall = toRecord(toolCallValue);
           const fn = toRecord(toolCall.function);
+          // Skip tool calls with empty names to avoid infinite placeholder_tool loops
+          const fnName = toString(fn.name).trim();
+          if (!fnName) {
+            continue;
+          }
           input.push({
             type: "function_call",
-            call_id: toString(toolCall.id),
-            name: normalizeToolName(fn.name),
+            call_id: (() => {
+              const id = toString(toolCall.id);
+              return id && id.trim()
+                ? id
+                : `call_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            })(),
+            name: fnName,
             arguments: toString(fn.arguments, "{}"),
           });
         }
@@ -343,6 +375,20 @@ export function openaiToOpenAIResponsesRequest(
       });
     }
   }
+
+  // Filter orphaned function_call_output items (no matching function_call)
+  // This happens when Claude Code compaction removes messages but leaves tool results
+  const knownCallIds = new Set(
+    input
+      .filter((item: any) => item.type === "function_call" && item.call_id)
+      .map((item: any) => item.call_id)
+  );
+  result.input = input.filter((item: any) => {
+    if (item.type === "function_call_output" && item.call_id) {
+      return knownCallIds.has(item.call_id);
+    }
+    return true;
+  });
 
   // If no system message, keep empty instructions
   if (!hasSystemMessage) {
