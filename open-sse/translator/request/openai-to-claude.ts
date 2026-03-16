@@ -123,6 +123,43 @@ export function openaiToClaudeRequest(model, body, stream) {
 
     flushCurrentMessage();
 
+    // Bug 3: Remove assistant messages with empty content (can happen when all tool_use blocks were skipped)
+    result.messages = result.messages.filter((msg) => {
+      if (msg.role === "assistant" && Array.isArray(msg.content) && msg.content.length === 0) {
+        return false;
+      }
+      return true;
+    });
+
+    // Bug 2: Filter orphaned tool_result blocks whose tool_use_id has no matching tool_use
+    const allToolUseIds = new Set<string>();
+    for (const msg of result.messages) {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "tool_use" && block.id) {
+            allToolUseIds.add(String(block.id));
+          }
+        }
+      }
+    }
+    for (const msg of result.messages) {
+      if (msg.role === "user" && Array.isArray(msg.content)) {
+        msg.content = msg.content.filter((block) => {
+          if (block.type === "tool_result" && block.tool_use_id) {
+            return allToolUseIds.has(String(block.tool_use_id));
+          }
+          return true;
+        });
+      }
+    }
+    // Remove user messages that became empty after orphan filtering
+    result.messages = result.messages.filter((msg) => {
+      if (msg.role === "user" && Array.isArray(msg.content) && msg.content.length === 0) {
+        return false;
+      }
+      return true;
+    });
+
     // Add cache_control to last assistant message
     for (let i = result.messages.length - 1; i >= 0; i--) {
       const message = result.messages[i];
@@ -291,11 +328,11 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map(), disableToolPr
             signature: part.signature || DEFAULT_THINKING_CLAUDE_SIGNATURE,
           });
         } else if (part.type === "tool_use") {
-          // Tool name already has prefix from tool declarations, keep as-is
-          // CRITICAL: Skip tool_use blocks with empty name (causes Claude 400 error)
-          if (part.name && part.name.trim()) {
-            blocks.push({ type: "tool_use", id: part.id, name: part.name, input: part.input });
+          // Skip tool_use blocks with empty names to avoid infinite placeholder_tool loops
+          if (typeof part.name !== "string" || !part.name.trim()) {
+            continue;
           }
+          blocks.push({ type: "tool_use", id: part.id, name: part.name, input: part.input });
         }
       }
     } else if (msg.content) {
@@ -308,12 +345,14 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map(), disableToolPr
     if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
       for (const tc of msg.tool_calls) {
         if (tc.type === "function") {
-          // CRITICAL: Skip tool_calls with empty function name (causes Claude 400 error)
-          const fnName = tc.function?.name;
-          if (!fnName || !fnName.trim()) continue;
+          const rawName = typeof tc.function?.name === "string" ? tc.function.name.trim() : "";
+          // Skip tool calls with empty names to avoid infinite placeholder_tool loops
+          if (!rawName) {
+            continue;
+          }
 
           // Apply prefix to tool name (skip if disabled)
-          const toolName = disableToolPrefix ? fnName : CLAUDE_OAUTH_TOOL_PREFIX + fnName;
+          const toolName = disableToolPrefix ? rawName : CLAUDE_OAUTH_TOOL_PREFIX + rawName;
           blocks.push({
             type: "tool_use",
             id: tc.id,
