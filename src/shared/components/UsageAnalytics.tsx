@@ -25,6 +25,7 @@ import {
 
 export default function UsageAnalytics() {
   const [range, setRange] = useState("30d");
+  const [selectedApiKey, setSelectedApiKey] = useState("");
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,9 @@ export default function UsageAnalytics() {
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/usage/analytics?range=${range}`);
+      const params = new URLSearchParams({ range });
+      if (selectedApiKey) params.set("apiKey", selectedApiKey);
+      const res = await fetch(`/api/usage/analytics?${params}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setAnalytics(data);
@@ -42,7 +45,7 @@ export default function UsageAnalytics() {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, selectedApiKey]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -90,26 +93,44 @@ export default function UsageAnalytics() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header + Time Range */}
+      {/* Header + Filters */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <span className="material-symbols-outlined text-primary text-[22px]">analytics</span>
           Usage Analytics
         </h2>
-        <div className="flex items-center gap-1 bg-black/[0.03] dark:bg-white/[0.03] rounded-lg p-1 border border-black/5 dark:border-white/5">
-          {ranges.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                range === r.value
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5"
-              }`}
+        <div className="flex items-center gap-3">
+          {/* API Key Filter */}
+          {(analytics?.registeredApiKeys || analytics?.byApiKey || []).length > 0 && (
+            <select
+              value={selectedApiKey}
+              onChange={(e) => setSelectedApiKey(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-xs font-semibold text-text-primary focus:outline-none focus:border-primary appearance-none cursor-pointer min-w-[140px]"
             >
-              {r.label}
-            </button>
-          ))}
+              <option value="">All API Keys</option>
+              {(analytics?.registeredApiKeys || []).map((k: any) => (
+                <option key={k.id || k.name} value={k.name}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Time Range */}
+          <div className="flex items-center gap-1 bg-black/[0.03] dark:bg-white/[0.03] rounded-lg p-1 border border-black/5 dark:border-white/5">
+            {ranges.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRange(r.value)}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  range === r.value
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

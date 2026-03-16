@@ -6,9 +6,17 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const range = searchParams.get("range") || "30d";
+    const apiKeyFilter = searchParams.get("apiKey") || "";
 
     const db = await getUsageDb();
-    const history = db.data.history || [];
+    let history = db.data.history || [];
+
+    // Filter by API key if specified
+    if (apiKeyFilter) {
+      history = history.filter(
+        (e: any) => (e.apiKeyName || "") === apiKeyFilter || (e.apiKeyId || "") === apiKeyFilter
+      );
+    }
 
     // Build connection map for account names
     const { getProviderConnections } = await import("@/lib/localDb");
@@ -34,7 +42,36 @@ export async function GET(request) {
       /* ignore */
     }
 
-    const analytics = await computeAnalytics(history, range, connectionMap);
+    // Build provider name map for display normalization
+    const providerNameMap: Record<string, string> = {};
+    try {
+      const { getProviderNodes } = await import("@/models");
+      const nodes = await getProviderNodes();
+      for (const nodeRaw of (Array.isArray(nodes) ? nodes : []) as unknown[]) {
+        const node =
+          nodeRaw && typeof nodeRaw === "object" ? (nodeRaw as Record<string, unknown>) : {};
+        const id = typeof node.id === "string" ? node.id : "";
+        const name = typeof node.name === "string" ? node.name : "";
+        if (id && name) providerNameMap[id] = name;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const analytics = await computeAnalytics(history, range, connectionMap, providerNameMap);
+
+    // Include all registered API keys so the filter dropdown shows all keys
+    try {
+      const { getApiKeys } = await import("@/lib/localDb");
+      const apiKeys = await getApiKeys();
+      const registeredKeys = (Array.isArray(apiKeys) ? apiKeys : []).map((k: any) => ({
+        name: k.name || "unnamed",
+        id: k.id || "",
+      }));
+      analytics.registeredApiKeys = registeredKeys;
+    } catch {
+      /* ignore */
+    }
 
     return NextResponse.json(analytics);
   } catch (error) {

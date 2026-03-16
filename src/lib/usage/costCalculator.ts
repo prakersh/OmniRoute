@@ -24,6 +24,65 @@ function normalizeModelName(model) {
   return parts[parts.length - 1];
 }
 
+// Default pricing per million tokens when no DB pricing is configured.
+// Prices are approximate industry rates for cost estimation.
+const DEFAULT_PRICING: Record<
+  string,
+  Record<string, { input: number; output: number; cached?: number }>
+> = {
+  codex: {
+    "gpt-5.3-codex": { input: 2, output: 8 },
+    "gpt-5.3-codex-high": { input: 2, output: 8 },
+    "gpt-5.3-codex-xhigh": { input: 2, output: 8 },
+  },
+  claude: {
+    "claude-opus-4-5-20251101": { input: 15, output: 75, cached: 1.5 },
+    "claude-opus-4-6": { input: 15, output: 75, cached: 1.5 },
+    "claude-sonnet-4-5-20250929": { input: 3, output: 15, cached: 0.3 },
+    "claude-sonnet-4.5": { input: 3, output: 15, cached: 0.3 },
+    "claude-sonnet-4.6": { input: 3, output: 15, cached: 0.3 },
+  },
+  // Boss/anthropic-compatible uses Claude pricing
+  boss: {
+    "claude-opus-4.6": { input: 15, output: 75, cached: 1.5 },
+    "claude-opus-4-6": { input: 15, output: 75, cached: 1.5 },
+    "claude-sonnet-4.5": { input: 3, output: 15, cached: 0.3 },
+  },
+  "anthropic-compatible": {
+    "claude-opus-4.6": { input: 15, output: 75, cached: 1.5 },
+    "claude-opus-4-6": { input: 15, output: 75, cached: 1.5 },
+    "claude-sonnet-4.5": { input: 3, output: 15, cached: 0.3 },
+  },
+  minimax: {
+    "MiniMax-M2.5": { input: 1, output: 4 },
+    "MiniMax-M2.1": { input: 1, output: 4 },
+  },
+  kiro: {
+    "claude-sonnet-4.5": { input: 3, output: 15, cached: 0.3 },
+    "claude-sonnet-4-5-20250929": { input: 3, output: 15, cached: 0.3 },
+  },
+};
+
+function getDefaultPricing(
+  provider: string,
+  model: string
+): { input: number; output: number; cached?: number } | null {
+  const normalizedProvider = provider?.toLowerCase?.() || "";
+  // Direct match
+  if (DEFAULT_PRICING[normalizedProvider]?.[model])
+    return DEFAULT_PRICING[normalizedProvider][model];
+  // Try with normalized model name
+  const normalizedModel = normalizeModelName(model);
+  if (DEFAULT_PRICING[normalizedProvider]?.[normalizedModel])
+    return DEFAULT_PRICING[normalizedProvider][normalizedModel];
+  // Try anthropic-compatible prefix match
+  if (normalizedProvider.startsWith("anthropic-compatible")) {
+    const ac = DEFAULT_PRICING["anthropic-compatible"];
+    return ac?.[model] || ac?.[normalizedModel] || null;
+  }
+  return null;
+}
+
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -55,7 +114,15 @@ export async function calculateCost(provider, model, tokens) {
         pricing = await getPricingForModel(provider, normalized);
       }
     }
-    if (!pricing) return 0;
+    // Fall back to default pricing if no DB pricing exists
+    if (!pricing) {
+      const defaultP = getDefaultPricing(provider, model);
+      if (defaultP) {
+        pricing = defaultP;
+      } else {
+        return 0;
+      }
+    }
 
     const pricingRecord =
       pricing && typeof pricing === "object" && !Array.isArray(pricing)

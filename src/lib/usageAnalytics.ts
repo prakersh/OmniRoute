@@ -66,13 +66,42 @@ function shortModelName(model: string) {
 }
 
 /**
+ * Normalize provider name for display using provider node names from DB.
+ * Falls back to lowercase with UUID stripping.
+ */
+function normalizeProviderName(
+  provider: string,
+  providerNameMap: Record<string, string> = {}
+): string {
+  if (!provider) return "unknown";
+  // Check if we have a user-defined name for this provider ID
+  if (providerNameMap[provider]) return providerNameMap[provider];
+  const lower = provider.toLowerCase();
+  // Also check if the provider name (as stored in history) matches a provider node name
+  // e.g. "Boss" in history should match the node named "Boss"
+  for (const [id, name] of Object.entries(providerNameMap)) {
+    if (name.toLowerCase() === lower) return name;
+  }
+  if (lower.startsWith("anthropic-compatible-"))
+    return providerNameMap[provider] || "anthropic-compatible";
+  if (lower.startsWith("openai-compatible-"))
+    return providerNameMap[provider] || "openai-compatible";
+  return lower;
+}
+
+/**
  * Compute all analytics data from usage history
  * @param {Array} history - Array of usage entries
  * @param {string} range - Time range filter
  * @param {Object} connectionMap - Map of connectionId → account name
  * @returns {Object} Analytics data
  */
-export async function computeAnalytics(history: any[], range = "30d", connectionMap: Record<string, string> = {}) {
+export async function computeAnalytics(
+  history: any[],
+  range = "30d",
+  connectionMap: Record<string, string> = {},
+  providerNameMap: Record<string, string> = {}
+) {
   const { start, end } = getDateRange(range);
 
   // ---- Filtered entries ----
@@ -205,8 +234,8 @@ export async function computeAnalytics(history: any[], range = "30d", connection
     byAccountMap[accountName].requests++;
     byAccountMap[accountName].cost += cost;
 
-    // By provider
-    const prov = entry.provider || "unknown";
+    // By provider (normalize for consistent display)
+    const prov = normalizeProviderName(entry.provider, providerNameMap);
     if (!byProviderMap[prov]) {
       byProviderMap[prov] = {
         provider: prov,

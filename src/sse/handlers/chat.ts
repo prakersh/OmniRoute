@@ -305,7 +305,8 @@ async function handleSingleModelChat(
 
     if (!credentials || credentials.allRateLimited) {
       if (lastStatus === 429 || lastStatus === 503) {
-        setModelUnavailable(provider, model, 60000, `HTTP ${lastStatus}`);
+        // 5 min unavailability when all accounts are exhausted (was 60s)
+        setModelUnavailable(provider, model, 5 * 60 * 1000, `HTTP ${lastStatus}`);
         log.info(
           "AVAILABILITY",
           `${provider}/${model} marked unavailable — all accounts exhausted (HTTP ${lastStatus})`
@@ -372,8 +373,12 @@ async function handleSingleModelChat(
       return result.response;
     }
 
-    // 6. Mark account as quota-exhausted on 429 response
+    // 6. Mark account as quota-exhausted on 429 or repeated 503
     if (result.status === 429) {
+      markAccountExhaustedFrom429(credentials.connectionId, provider);
+    }
+    // Codex 503 with "queue overflow" means all slots are busy — likely quota-exhausted
+    if (result.status === 503 && provider === "codex") {
       markAccountExhaustedFrom429(credentials.connectionId, provider);
     }
 

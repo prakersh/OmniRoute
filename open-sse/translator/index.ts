@@ -131,7 +131,9 @@ export function translateRequest(
   }
 
   // Final step: prepare request for Claude format endpoints
-  if (targetFormat === FORMATS.CLAUDE) {
+  // Skip heavy-handed preparation for Claude→Claude passthrough (same-format)
+  // to avoid corrupting valid Claude requests with message merging, content stripping, etc.
+  if (targetFormat === FORMATS.CLAUDE && sourceFormat !== FORMATS.CLAUDE) {
     result = prepareClaudeRequest(result, provider);
   }
 

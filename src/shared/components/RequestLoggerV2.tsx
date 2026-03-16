@@ -95,6 +95,7 @@ export default function RequestLoggerV2() {
   const intervalRef = useRef(null);
   const hasLoadedRef = useRef(false);
   const [providerNodes, setProviderNodes] = useState([]);
+  const [logLimit, setLogLimit] = useState(200);
 
   // Column visibility with localStorage persistence
   const [visibleColumns, setVisibleColumns] = useState(() => {
@@ -130,7 +131,7 @@ export default function RequestLoggerV2() {
         if (selectedProvider) params.set("provider", selectedProvider);
         if (selectedAccount) params.set("account", selectedAccount);
         if (selectedApiKey) params.set("apiKey", selectedApiKey);
-        params.set("limit", "300");
+        params.set("limit", String(logLimit));
 
         const res = await fetch(`/api/usage/call-logs?${params}`);
         if (res.ok) {
@@ -143,7 +144,15 @@ export default function RequestLoggerV2() {
         if (showLoading) setLoading(false);
       }
     },
-    [search, activeFilter, selectedModel, selectedAccount, selectedProvider, selectedApiKey]
+    [
+      search,
+      activeFilter,
+      selectedModel,
+      selectedAccount,
+      selectedProvider,
+      selectedApiKey,
+      logLimit,
+    ]
   );
 
   useEffect(() => {
@@ -373,6 +382,19 @@ export default function RequestLoggerV2() {
             {sortedLogs.length} shown
           </span>
         </div>
+
+        {/* Limit Selector */}
+        <select
+          value={logLimit}
+          onChange={(e) => setLogLimit(Number(e.target.value))}
+          className="px-3 py-2 rounded-lg bg-bg-subtle border border-border text-sm text-text-primary focus:outline-none focus:border-primary appearance-none cursor-pointer min-w-[90px]"
+          title="Max logs to display"
+        >
+          <option value={200}>200</option>
+          <option value={500}>500</option>
+          <option value={1000}>1000</option>
+          <option value={5000}>All</option>
+        </select>
 
         {/* Sort Dropdown */}
         <select

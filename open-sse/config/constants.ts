@@ -136,7 +136,7 @@ export const COOLDOWN_MS = {
   paymentRequired: 2 * 60 * 1000, // 402/403 → 2 min
   notFound: 2 * 60 * 1000, // 404 → 2 minutes
   transientInitial: 5 * 1000, // 408/500/502/503/504 first hit → 5s (backoff from here)
-  transientMax: 60 * 1000, // 502/503/504 backoff ceiling → 60s
+  transientMax: 5 * 60 * 1000, // 502/503/504 backoff ceiling → 5 min (was 60s)
   transient: 5 * 1000, // Legacy alias → points to transientInitial
   requestNotAllowed: 5 * 1000, // "Request not allowed" → 5 sec
   // Legacy aliases for backward compatibility

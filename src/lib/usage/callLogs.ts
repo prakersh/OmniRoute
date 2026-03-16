@@ -47,7 +47,7 @@ function hasTruncatedFlag(value: unknown): boolean {
   return (value as Record<string, unknown>)._truncated === true;
 }
 
-const CALL_LOGS_MAX = parseInt(process.env.CALL_LOGS_MAX || "200", 10);
+const CALL_LOGS_MAX = parseInt(process.env.CALL_LOGS_MAX || "5000", 10);
 const LOG_RETENTION_DAYS = parseInt(process.env.LOG_RETENTION_DAYS || "7", 10);
 const CALL_LOG_PAYLOAD_MODE = (() => {
   const value = (process.env.CALL_LOG_PAYLOAD_MODE || "full").toLowerCase();

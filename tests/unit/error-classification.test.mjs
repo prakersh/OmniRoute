@@ -64,7 +64,7 @@ test("getProviderProfile: profiles have different thresholds", () => {
 
 // ─── Exponential Backoff for Transient Errors ───────────────────────────────
 
-test("502 transient: exponential backoff 5s → 10s → 20s → 40s → 60s (capped)", () => {
+test("502 transient: exponential backoff 5s → 10s → 20s → 40s → 80s → capped at 5min", () => {
   const cooldowns = [];
   for (let level = 0; level < 6; level++) {
     const result = checkFallbackError(502, "", level, null, null);
@@ -78,9 +78,8 @@ test("502 transient: exponential backoff 5s → 10s → 20s → 40s → 60s (cap
   assert.equal(cooldowns[1], COOLDOWN_MS.transientInitial * 2); // 10s
   assert.equal(cooldowns[2], COOLDOWN_MS.transientInitial * 4); // 20s
   assert.equal(cooldowns[3], COOLDOWN_MS.transientInitial * 8); // 40s
-  // Level 4: 5s * 16 = 80s → capped at 60s
-  assert.equal(cooldowns[4], COOLDOWN_MS.transientMax); // 60s
-  assert.equal(cooldowns[5], COOLDOWN_MS.transientMax); // 60s (stays capped)
+  assert.equal(cooldowns[4], COOLDOWN_MS.transientInitial * 16); // 80s (under 5min cap)
+  assert.equal(cooldowns[5], COOLDOWN_MS.transientInitial * 32); // 160s (under 5min cap)
 });
 
 test("502 with OAuth provider: uses oauth profile transientCooldown", () => {
