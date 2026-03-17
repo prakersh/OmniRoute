@@ -13,6 +13,7 @@ import { refreshWithRetry } from "../services/tokenRefresh.ts";
 import { createRequestLogger } from "../utils/requestLogger.ts";
 import { getModelTargetFormat, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.ts";
 import { resolveModelAlias } from "../services/modelDeprecation.ts";
+import { getUnsupportedParams } from "../config/providerRegistry.ts";
 import { createErrorResult, parseUpstreamError, formatProviderError } from "../utils/error.ts";
 import { HTTP_STATUS } from "../config/constants.ts";
 import { handleBypassRequest } from "../utils/bypassHandler.ts";
@@ -45,6 +46,7 @@ import {
   isNativeClaudeProvider,
   normalizeClaudePassthroughForProvider,
 } from "../services/claudePassthrough.ts";
+import { computeRequestHash, deduplicate, shouldDeduplicate } from "../services/requestDedup.ts";
 
 export function shouldUseNativeCodexPassthrough({
   provider,
@@ -92,6 +94,22 @@ export async function handleChatCore({
 }) {
   const { provider, model, extendedContext } = modelInfo;
   const startTime = Date.now();
+  const persistFailureUsage = (statusCode: number, errorCode?: string | null) => {
+    saveRequestUsage({
+      provider: provider || "unknown",
+      model: model || "unknown",
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, reasoning: 0 },
+      status: String(statusCode),
+      success: false,
+      latencyMs: Date.now() - startTime,
+      timeToFirstTokenMs: 0,
+      errorCode: errorCode || String(statusCode),
+      timestamp: new Date().toISOString(),
+      connectionId: connectionId || undefined,
+      apiKeyId: apiKeyInfo?.id || undefined,
+      apiKeyName: apiKeyInfo?.name || undefined,
+    }).catch(() => {});
+  };
 
   // ── Phase 9.2: Idempotency check ──
   const idempotencyKey = getIdempotencyKey(clientRawRequest?.headers);
@@ -249,6 +267,55 @@ export async function handleChatCore({
         });
       }
 
+      // Strip empty text content blocks from messages.
+      // Anthropic API rejects {"type":"text","text":""} with 400 "text content blocks must be non-empty".
+      // Some clients (LiteLLM passthrough, @ai-sdk/anthropic) may forward these empty blocks as-is.
+      if (Array.isArray(translatedBody.messages)) {
+        for (const msg of translatedBody.messages) {
+          if (Array.isArray(msg.content)) {
+            msg.content = msg.content.filter(
+              (block: Record<string, unknown>) =>
+                block.type !== "text" || (typeof block.text === "string" && block.text.length > 0)
+            );
+          }
+        }
+      }
+
+      // ── #409: Normalize unsupported content part types ──
+      // Cursor and other clients send {type:"file"} when attaching .md or other files.
+      // Providers (Copilot, OpenAI) only accept "text" and "image_url" in content arrays.
+      // Convert: file → text (extract content), drop unrecognized types with a warning.
+      if (Array.isArray(translatedBody.messages)) {
+        for (const msg of translatedBody.messages) {
+          if (msg.role === "user" && Array.isArray(msg.content)) {
+            msg.content = (msg.content as Record<string, unknown>[]).flatMap(
+              (block: Record<string, unknown>) => {
+                if (block.type === "text" || block.type === "image_url" || block.type === "image") {
+                  return [block];
+                }
+                // file / document → extract text content
+                if (block.type === "file" || block.type === "document") {
+                  const fileContent =
+                    (block.file as Record<string, unknown>)?.content ??
+                    (block.file as Record<string, unknown>)?.text ??
+                    block.content ??
+                    block.text;
+                  const fileName =
+                    (block.file as Record<string, unknown>)?.name ?? block.name ?? "attachment";
+                  if (typeof fileContent === "string" && fileContent.length > 0) {
+                    return [{ type: "text", text: `[${fileName}]\n${fileContent}` }];
+                  }
+                  return [];
+                }
+                // Unknown types: drop silently
+                log?.debug?.("CONTENT", `Dropped unsupported content part type="${block.type}"`);
+                return [];
+              }
+            );
+          }
+        }
+      }
+
       translatedBody = translateRequest(
         sourceFormat,
         targetFormat,
@@ -306,8 +373,74 @@ export async function handleChatCore({
   // Update model in body
   translatedBody.model = model;
 
+  // Strip unsupported parameters for reasoning models (o1, o3, etc.)
+  const unsupported = getUnsupportedParams(provider, model);
+  if (unsupported.length > 0) {
+    const stripped: string[] = [];
+    for (const param of unsupported) {
+      if (Object.hasOwn(translatedBody, param)) {
+        stripped.push(param);
+        delete translatedBody[param];
+      }
+    }
+    if (stripped.length > 0) {
+      log?.warn?.("PARAMS", `Stripped unsupported params for ${model}: ${stripped.join(", ")}`);
+    }
+  }
+
   // Get executor for this provider
   const executor = getExecutor(provider);
+
+  // Create stream controller for disconnect detection
+  const streamController = createStreamController({ onDisconnect, log, provider, model });
+
+  const dedupRequestBody = { ...translatedBody, model: `${provider}/${model}` };
+  const dedupEnabled = shouldDeduplicate(dedupRequestBody);
+  const dedupHash = dedupEnabled ? computeRequestHash(dedupRequestBody) : null;
+
+  const executeProviderRequest = async (modelToCall = model, allowDedup = false) => {
+    const execute = async () => {
+      const bodyToSend =
+        translatedBody.model === modelToCall
+          ? translatedBody
+          : { ...translatedBody, model: modelToCall };
+
+      const rawResult = await withRateLimit(provider, connectionId, modelToCall, () =>
+        executor.execute({
+          model: modelToCall,
+          body: bodyToSend,
+          stream,
+          credentials,
+          signal: streamController.signal,
+          log,
+          extendedContext,
+        })
+      );
+
+      if (stream) return rawResult;
+
+      // Non-stream responses need cloning for shared dedup consumers.
+      const status = rawResult.response.status;
+      const statusText = rawResult.response.statusText;
+      const headers = Array.from(rawResult.response.headers.entries());
+      const payload = await rawResult.response.text();
+
+      return {
+        ...rawResult,
+        response: new Response(payload, { status, statusText, headers }),
+      };
+    };
+
+    if (allowDedup && dedupEnabled && dedupHash) {
+      const dedupResult = await deduplicate(dedupHash, execute);
+      if (dedupResult.wasDeduplicated) {
+        log?.debug?.("DEDUP", `Joined in-flight request hash=${dedupHash}`);
+      }
+      return dedupResult.result;
+    }
+
+    return execute();
+  };
 
   // Track pending request
   trackPendingRequest(model, provider, connectionId, true);
@@ -326,9 +459,6 @@ export async function handleChatCore({
     0;
   log?.debug?.("REQUEST", `${provider.toUpperCase()} | ${model} | ${msgCount} msgs`);
 
-  // Create stream controller for disconnect detection
-  const streamController = createStreamController({ onDisconnect, log, provider, model });
-
   // Execute request using executor (handles URL building, headers, fallback, transform)
   let providerResponse;
   let providerUrl;
@@ -336,17 +466,7 @@ export async function handleChatCore({
   let finalBody;
 
   try {
-    const result = await withRateLimit(provider, connectionId, model, () =>
-      executor.execute({
-        model,
-        body: translatedBody,
-        stream,
-        credentials,
-        signal: streamController.signal,
-        log,
-        extendedContext,
-      })
-    );
+    const result = await executeProviderRequest(model, true);
 
     providerResponse = result.response;
     providerUrl = result.url;
@@ -393,6 +513,7 @@ export async function handleChatCore({
       streamController.handleError(error);
       return createErrorResult(499, "Request aborted");
     }
+    persistFailureUsage(HTTP_STATUS.BAD_GATEWAY, error?.name || "upstream_error");
     const errMsg = formatProviderError(error, provider, model, HTTP_STATUS.BAD_GATEWAY);
     console.log(`${COLORS.red}[ERROR] ${errMsg}${COLORS.reset}`);
     return createErrorResult(HTTP_STATUS.BAD_GATEWAY, errMsg);
@@ -502,17 +623,7 @@ export async function handleChatCore({
         log?.info?.("MODEL_FALLBACK", `${model} unavailable (${statusCode}) → trying ${nextModel}`);
         // Re-execute with the fallback model
         try {
-          const fallbackResult = await withRateLimit(provider, connectionId, nextModel, () =>
-            executor.execute({
-              model: nextModel,
-              body: translatedBody,
-              stream,
-              credentials,
-              signal: streamController.signal,
-              log,
-              extendedContext,
-            })
-          );
+          const fallbackResult = await executeProviderRequest(nextModel, false);
           if (fallbackResult.response.ok) {
             providerResponse = fallbackResult.response;
             providerUrl = fallbackResult.url;
@@ -524,15 +635,19 @@ export async function handleChatCore({
             // We fall through by NOT returning here
           } else {
             // Fallback also failed — return original error
+            persistFailureUsage(statusCode, "model_unavailable");
             return createErrorResult(statusCode, errMsg, retryAfterMs);
           }
         } catch {
+          persistFailureUsage(statusCode, "model_unavailable");
           return createErrorResult(statusCode, errMsg, retryAfterMs);
         }
       } else {
+        persistFailureUsage(statusCode, "model_unavailable");
         return createErrorResult(statusCode, errMsg, retryAfterMs);
       }
     } else {
+      persistFailureUsage(statusCode, `upstream_${statusCode}`);
       return createErrorResult(statusCode, errMsg, retryAfterMs);
     }
     // ── End T5 ───────────────────────────────────────────────────────────────
@@ -561,6 +676,7 @@ export async function handleChatCore({
           connectionId,
           status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}`,
         }).catch(() => {});
+        persistFailureUsage(HTTP_STATUS.BAD_GATEWAY, "invalid_sse_payload");
         return createErrorResult(
           HTTP_STATUS.BAD_GATEWAY,
           "Invalid SSE response for non-streaming request"
@@ -578,6 +694,7 @@ export async function handleChatCore({
           connectionId,
           status: `FAILED ${HTTP_STATUS.BAD_GATEWAY}`,
         }).catch(() => {});
+        persistFailureUsage(HTTP_STATUS.BAD_GATEWAY, "invalid_json_payload");
         return createErrorResult(HTTP_STATUS.BAD_GATEWAY, "Invalid JSON response from provider");
       }
     }
@@ -620,6 +737,11 @@ export async function handleChatCore({
         provider: provider || "unknown",
         model: model || "unknown",
         tokens: usage,
+        status: "200",
+        success: true,
+        latencyMs: Date.now() - startTime,
+        timeToFirstTokenMs: Date.now() - startTime,
+        errorCode: null,
         timestamp: new Date().toISOString(),
         connectionId: connectionId || undefined,
         apiKeyId: apiKeyInfo?.id || undefined,

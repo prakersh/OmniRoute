@@ -52,6 +52,7 @@ const comboStrategySchema = z.enum([
   "least-used",
   "cost-optimized",
   "strict-random",
+  "auto",
 ]);
 
 const comboRuntimeConfigSchema = z
@@ -139,6 +140,12 @@ export const updateSettingsSchema = z.object({
     .optional(),
   wildcardAliases: z.array(z.object({ pattern: z.string(), target: z.string() })).optional(),
   stickyRoundRobinLimit: z.number().int().min(0).max(1000).optional(),
+  // Auto intent classifier settings (multilingual routing)
+  intentDetectionEnabled: z.boolean().optional(),
+  intentSimpleMaxWords: z.number().int().min(1).max(500).optional(),
+  intentExtraCodeKeywords: z.array(z.string().max(100)).optional(),
+  intentExtraReasoningKeywords: z.array(z.string().max(100)).optional(),
+  intentExtraSimpleKeywords: z.array(z.string().max(100)).optional(),
   // Protocol toggles (default: disabled)
   mcpEnabled: z.boolean().optional(),
   a2aEnabled: z.boolean().optional(),
@@ -551,7 +558,7 @@ export const removeModelAliasSchema = z.object({
   from: z.string().trim().min(1),
 });
 
-const proxyConfigSchema = z
+export const proxyConfigSchema = z
   .object({
     type: z
       .preprocess(
@@ -620,6 +627,67 @@ export const testProxySchema = z.object({
     password: z.string().optional(),
   }),
 });
+
+export const createProxyRegistrySchema = z
+  .object({
+    name: z.string().trim().min(1, "name is required").max(120),
+    type: z
+      .preprocess(
+        (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+        z.enum(["http", "https", "socks5"])
+      )
+      .optional()
+      .default("http"),
+    host: z.string().trim().min(1, "host is required").max(255),
+    port: z.coerce.number().int().min(1).max(65535),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    region: z.string().trim().max(64).nullable().optional(),
+    notes: z.string().trim().max(1000).nullable().optional(),
+    status: z.enum(["active", "inactive"]).optional().default("active"),
+  })
+  .strict();
+
+export const updateProxyRegistrySchema = createProxyRegistrySchema.partial().extend({
+  id: z.string().trim().min(1, "id is required"),
+});
+
+export const proxyAssignmentSchema = z
+  .object({
+    scope: z.enum(["global", "provider", "account", "combo", "key"]),
+    scopeId: z.string().trim().nullable().optional(),
+    proxyId: z.string().trim().nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.scope !== "global" && !value.scopeId?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "scopeId is required for provider/account/combo/key scope",
+        path: ["scopeId"],
+      });
+    }
+  });
+
+export const bulkProxyAssignmentSchema = z
+  .object({
+    scope: z.enum(["global", "provider", "account", "combo", "key"]),
+    scopeIds: z.array(z.string().trim().min(1)).optional().default([]),
+    proxyId: z.string().trim().nullable().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.scope !== "global" &&
+      (!Array.isArray(value.scopeIds) || value.scopeIds.length === 0)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "scopeIds is required for provider/account/combo/key scope",
+        path: ["scopeIds"],
+      });
+    }
+  });
 
 const jsonRecordSchema = z.record(z.string(), z.unknown());
 const nonEmptyJsonRecordSchema = jsonRecordSchema.refine(

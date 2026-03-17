@@ -11,8 +11,22 @@
 export interface RegistryModel {
   id: string;
   name: string;
+  toolCalling?: boolean;
   targetFormat?: string;
+  unsupportedParams?: readonly string[];
 }
+
+// Reasoning models reject temperature, top_p, penalties, logprobs, n.
+// Frozen to prevent accidental mutation (shared across all model entries).
+const REASONING_UNSUPPORTED: readonly string[] = Object.freeze([
+  "temperature",
+  "top_p",
+  "frequency_penalty",
+  "presence_penalty",
+  "logprobs",
+  "top_logprobs",
+  "n",
+]);
 
 export interface RegistryOAuth {
   clientIdEnv?: string;
@@ -127,12 +141,15 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     },
     models: [
       { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
-      { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash" },
-      { id: "gemini-3-pro-preview", name: "Gemini 3.0 Pro Preview" },
-      { id: "gemini-3-flash-preview", name: "Gemini 3.0 Flash Preview" },
+      { id: "gemini-3-1-pro", name: "Gemini 3.1 Pro (Alt ID)" },
+      { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
       { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
       { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+      { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Exp" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
     ],
   },
 
@@ -156,12 +173,14 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     },
     models: [
       { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
-      { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash" },
-      { id: "gemini-3-flash-preview", name: "Gemini 3.0 Flash Preview" },
-      { id: "gemini-3-pro-preview", name: "Gemini 3.0 Pro Preview" },
+      { id: "gemini-3-1-pro", name: "Gemini 3.1 Pro (Alt ID)" },
+      { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
       { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
       { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
     ],
   },
 
@@ -305,10 +324,9 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     models: [
       { id: "claude-opus-4-6-thinking", name: "Claude Opus 4.6 Thinking" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
-      { id: "gemini-3.1-pro-high", name: "Gemini 3.1 Pro High" },
-      { id: "gemini-3.1-pro-low", name: "Gemini 3.1 Pro Low" },
-      { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash" },
-      { id: "gemini-3-flash", name: "Gemini 3.0 Flash" },
+      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
       { id: "gpt-oss-120b-medium", name: "GPT OSS 120B Medium" },
     ],
   },
@@ -357,8 +375,7 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
       { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
-      { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
-      { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
       { id: "grok-code-fast-1", name: "Grok Code Fast 1" },
       { id: "oswe-vscode-prime", name: "Raptor Mini" },
     ],
@@ -430,8 +447,11 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       { id: "gpt-4o", name: "GPT-4o" },
       { id: "gpt-4o-mini", name: "GPT-4o Mini" },
       { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
-      { id: "o1", name: "O1" },
-      { id: "o1-mini", name: "O1 Mini" },
+      { id: "o1", name: "O1", unsupportedParams: REASONING_UNSUPPORTED },
+      { id: "o1-mini", name: "O1 Mini", unsupportedParams: REASONING_UNSUPPORTED },
+      { id: "o1-pro", name: "O1 Pro", unsupportedParams: REASONING_UNSUPPORTED },
+      { id: "o3", name: "O3", unsupportedParams: REASONING_UNSUPPORTED },
+      { id: "o3-mini", name: "O3 Mini", unsupportedParams: REASONING_UNSUPPORTED },
     ],
   },
 
@@ -448,8 +468,13 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       "Anthropic-Version": "2023-06-01",
     },
     models: [
+      { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
       { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
+      { id: "claude-sonnet-4-6-20251031", name: "Claude Sonnet 4.6 (Dated)" },
+      { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
       { id: "claude-opus-4-20250514", name: "Claude Opus 4" },
+      { id: "claude-opus-4-6-20251031", name: "Claude Opus 4.6 (Dated)" },
+      { id: "claude-opus-4.6", name: "Claude Opus 4.6" },
       { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
     ],
   },
@@ -483,6 +508,8 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       "Anthropic-Beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
     },
     models: [
+      { id: "glm-5", name: "GLM 5" },
+      { id: "glm-5-turbo", name: "GLM 5 Turbo" },
       { id: "glm-4.7-flash", name: "GLM 4.7 Flash" },
       { id: "glm-4.7", name: "GLM 4.7" },
       { id: "glm-4.6v", name: "GLM 4.6V (Vision)" },
@@ -491,6 +518,25 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       { id: "glm-4.5", name: "GLM 4.5" },
       { id: "glm-4.5-air", name: "GLM 4.5 Air" },
       { id: "glm-4-32b", name: "GLM 4 32B" },
+    ],
+  },
+
+  zai: {
+    id: "zai",
+    alias: "zai",
+    format: "claude",
+    executor: "default",
+    baseUrl: "https://api.z.ai/api/anthropic/v1/messages",
+    urlSuffix: "?beta=true",
+    authType: "apikey",
+    authHeader: "x-api-key",
+    headers: {
+      "Anthropic-Version": "2023-06-01",
+      "Anthropic-Beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
+    },
+    models: [
+      { id: "glm-5", name: "GLM 5" },
+      { id: "glm-5-turbo", name: "GLM 5 Turbo" },
     ],
   },
 
@@ -625,7 +671,11 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       "Anthropic-Version": "2023-06-01",
       "Anthropic-Beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
     },
-    models: [{ id: "MiniMax-M2.1", name: "MiniMax M2.1" }],
+    models: [
+      { id: "minimax-m2.5", name: "MiniMax M2.5" },
+      { id: "MiniMax-M2.5", name: "MiniMax M2.5 (Legacy Alias)" },
+      { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
+    ],
   },
 
   "minimax-cn": {
@@ -643,6 +693,8 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     },
     models: [
       // Keep parity with minimax to ensure model discovery works for minimax-cn connections.
+      { id: "minimax-m2.5", name: "MiniMax M2.5" },
+      { id: "MiniMax-M2.5", name: "MiniMax M2.5 (Legacy Alias)" },
       { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
     ],
   },
@@ -705,10 +757,14 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     authType: "apikey",
     authHeader: "bearer",
     models: [
-      { id: "grok-4", name: "Grok 4" },
+      { id: "grok-4-fast-non-reasoning", name: "Grok 4 Fast" },
       { id: "grok-4-fast-reasoning", name: "Grok 4 Fast Reasoning" },
-      { id: "grok-code-fast-1", name: "Grok Code Fast" },
+      { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast" },
+      { id: "grok-4-1-fast-reasoning", name: "Grok 4.1 Fast Reasoning" },
+      { id: "grok-4-0709", name: "Grok 4 (0709)" },
+      { id: "grok-4", name: "Grok 4" },
       { id: "grok-3", name: "Grok 3" },
+      { id: "grok-3-mini", name: "Grok 3 Mini" },
     ],
   },
 
@@ -837,12 +893,17 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     authType: "apikey",
     authHeader: "bearer",
     models: [
+      { id: "gpt-oss-120b", name: "GPT OSS 120B", toolCalling: false },
+      { id: "openai/gpt-oss-120b", name: "GPT OSS 120B (OpenAI Prefix)", toolCalling: false },
+      { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
+      { id: "nvidia/llama-3.3-70b-instruct", name: "Llama 3.3 70B (NVIDIA Prefix)" },
+      { id: "meta/llama-4-maverick-17b-128e-instruct", name: "Llama 4 Maverick" },
       { id: "moonshotai/kimi-k2.5", name: "Kimi K2.5" },
       { id: "z-ai/glm4.7", name: "GLM 4.7" },
       { id: "deepseek-ai/deepseek-v3.2", name: "DeepSeek V3.2" },
-      { id: "nvidia/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
-      { id: "meta/llama-4-maverick-17b-128e-instruct", name: "Llama 4 Maverick" },
       { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
+      { id: "nvidia/llama-3.1-70b-instruct", name: "Llama 3.1 70B" },
+      { id: "nvidia/llama-3.1-405b-instruct", name: "Llama 3.1 405B" },
     ],
   },
 
@@ -936,6 +997,26 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       { id: "hf:zai-org/GLM-4.7", name: "GLM 4.7" },
       { id: "hf:moonshotai/Kimi-K2.5", name: "Kimi K2.5" },
       { id: "hf:deepseek-ai/DeepSeek-V3.2", name: "DeepSeek V3.2" },
+    ],
+    passthroughModels: true,
+  },
+
+  "kilo-gateway": {
+    id: "kilo-gateway",
+    alias: "kg",
+    format: "openai",
+    executor: "default",
+    baseUrl: "https://api.kilo.ai/api/gateway/chat/completions",
+    modelsUrl: "https://api.kilo.ai/api/gateway/models",
+    authType: "apikey",
+    authHeader: "bearer",
+    models: [
+      { id: "kilo-auto/frontier", name: "Kilo Auto Frontier" },
+      { id: "kilo-auto/balanced", name: "Kilo Auto Balanced" },
+      { id: "kilo-auto/free", name: "Kilo Auto Free" },
+      { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super 120B (Free)" },
+      { id: "minimax/minimax-m2.5:free", name: "MiniMax M2.5 (Free)" },
+      { id: "arcee-ai/trinity-large-preview:free", name: "Trinity Large Preview (Free)" },
     ],
     passthroughModels: true,
   },
@@ -1043,6 +1124,38 @@ export function generateAliasMap(): Record<string, string> {
   return map;
 }
 
+// ── Local Provider Detection ──────────────────────────────────────────────
+
+// Evaluated once at module load time — process restart required for env var changes.
+const LOCAL_HOSTNAMES = new Set([
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "[::1]",
+  ...(typeof process !== "undefined" && process.env.LOCAL_HOSTNAMES
+    ? process.env.LOCAL_HOSTNAMES.split(",")
+        .map((h) => h.trim())
+        .filter(Boolean)
+    : []),
+]);
+
+/**
+ * Detect if a base URL points to a local inference backend.
+ * Used for shorter 404 cooldowns (model-only, not connection) and health check targets.
+ *
+ * Operators can extend via LOCAL_HOSTNAMES env var (comma-separated) for Docker
+ * hostnames (e.g., LOCAL_HOSTNAMES=omlx,mlx-audio).
+ */
+export function isLocalProvider(baseUrl?: string | null): boolean {
+  if (!baseUrl) return false;
+  try {
+    const url = new URL(baseUrl);
+    return LOCAL_HOSTNAMES.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── Registry Lookup Helpers ───────────────────────────────────────────────
 
 const _byAlias = new Map<string, RegistryEntry>();
@@ -1060,6 +1173,43 @@ export function getRegistryEntry(provider: string): RegistryEntry | null {
 /** Get all registered provider IDs */
 export function getRegisteredProviders(): string[] {
   return Object.keys(REGISTRY);
+}
+
+// Precomputed map: modelId → unsupportedParams (O(1) lookup instead of O(N×M) scan).
+// Built once at module load from all registry entries.
+const _unsupportedParamsMap = new Map<string, readonly string[]>();
+for (const entry of Object.values(REGISTRY)) {
+  for (const model of entry.models) {
+    if (model.unsupportedParams && !_unsupportedParamsMap.has(model.id)) {
+      _unsupportedParamsMap.set(model.id, model.unsupportedParams);
+    }
+  }
+}
+
+/**
+ * Get unsupported parameters for a specific model.
+ * Uses O(1) precomputed lookup. Also handles prefixed model IDs
+ * (e.g., "openai/o3" → strips prefix and looks up "o3").
+ * Returns empty array if no restrictions are defined.
+ */
+export function getUnsupportedParams(provider: string, modelId: string): readonly string[] {
+  // 1. Check current provider's registry (exact match)
+  const entry = getRegistryEntry(provider);
+  const modelEntry = entry?.models.find((m) => m.id === modelId);
+  if (modelEntry?.unsupportedParams) return modelEntry.unsupportedParams;
+
+  // 2. O(1) lookup in precomputed map (handles cross-provider routing)
+  const cached = _unsupportedParamsMap.get(modelId);
+  if (cached) return cached;
+
+  // 3. Handle prefixed model IDs (e.g., "openai/o3" → "o3")
+  if (modelId.includes("/")) {
+    const bareId = modelId.split("/").pop() || "";
+    const bare = _unsupportedParamsMap.get(bareId);
+    if (bare) return bare;
+  }
+
+  return [];
 }
 
 /**

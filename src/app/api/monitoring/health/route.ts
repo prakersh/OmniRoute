@@ -13,11 +13,13 @@ export async function GET() {
     const { getAllCircuitBreakerStatuses } = await import("@/shared/utils/circuitBreaker");
     const { getAllRateLimitStatus } = await import("@omniroute/open-sse/services/rateLimitManager");
     const { getAllModelLockouts } = await import("@omniroute/open-sse/services/accountFallback");
+    const { getInflightCount } = await import("@omniroute/open-sse/services/requestDedup.ts");
 
     const settings = await getSettings();
     const circuitBreakers = getAllCircuitBreakerStatuses();
     const rateLimitStatus = getAllRateLimitStatus();
     const lockouts = getAllModelLockouts();
+    const { getAllHealthStatuses } = await import("@/lib/localHealthCheck");
 
     // System info
     const system = {
@@ -46,8 +48,12 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       system,
       providerHealth,
+      localProviders: getAllHealthStatuses(),
       rateLimitStatus,
       lockouts,
+      dedup: {
+        inflightRequests: getInflightCount(),
+      },
       setupComplete: settings?.setupComplete || false,
     });
   } catch (error) {
