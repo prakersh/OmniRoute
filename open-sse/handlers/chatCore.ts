@@ -41,6 +41,10 @@ import {
 import { getIdempotencyKey, checkIdempotency, saveIdempotency } from "@/lib/idempotencyLayer";
 import { createProgressTransform, wantsProgress } from "../utils/progressTracker.ts";
 import { isModelUnavailableError, getNextFamilyFallback } from "../services/modelFamilyFallback.ts";
+import {
+  isNativeClaudeProvider,
+  normalizeClaudePassthroughForProvider,
+} from "../services/claudePassthrough.ts";
 
 export function shouldUseNativeCodexPassthrough({
   provider,
@@ -190,18 +194,24 @@ export async function handleChatCore({
       translatedBody = { ...body, _nativeCodexPassthrough: true };
       log?.debug?.("FORMAT", "native codex passthrough enabled");
     } else if (isClaudePassthrough) {
-      // Claude-to-Claude passthrough: forward body completely untouched.
-      // No translation, no field stripping, no thinking normalization.
-      // We are just a gateway -- do not interfere with the request in any way.
-      translatedBody = { ...body };
-      log?.debug?.("FORMAT", "claude->claude passthrough -- forwarding untouched");
+      // Claude-to-Claude passthrough:
+      // keep payload as-is for native Claude, but normalize known incompatible fields
+      // for strict Anthropic-compatible backends (MiniMax/Boss/custom nodes).
+      const normalized = normalizeClaudePassthroughForProvider(body, provider);
+      translatedBody = normalized.body;
+      if (normalized.strippedFields.length > 0) {
+        log?.debug?.(
+          "FORMAT",
+          `claude passthrough normalized: ${normalized.strippedFields.join(", ")}`
+        );
+      }
+      log?.debug?.("FORMAT", "claude->claude passthrough");
     } else {
       translatedBody = { ...body };
 
       // Issue #199: Disable tool name prefix when routing Claude-format requests
       // to non-Claude backends (prefix causes tool name mismatches)
-      const claudeProviders = ["claude", "anthropic"];
-      if (targetFormat === FORMATS.CLAUDE && !claudeProviders.includes(provider?.toLowerCase?.())) {
+      if (targetFormat === FORMATS.CLAUDE && !isNativeClaudeProvider(provider)) {
         translatedBody._disableToolPrefix = true;
       }
 

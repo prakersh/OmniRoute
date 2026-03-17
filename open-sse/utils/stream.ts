@@ -184,8 +184,20 @@ export function createSSEStream(options: StreamOptions = {}) {
                   typeof parsed.type === "string" &&
                   parsed.type.startsWith("response.");
 
-                if (isResponsesSSE) {
-                  // Responses SSE: only extract usage, forward payload as-is
+                // Detect Claude SSE payloads (message_start, content_block_delta, message_delta, etc.)
+                // These must NOT go through OpenAI sanitization or hasValuableContent checks.
+                const isClaudeSSE =
+                  parsed.type &&
+                  typeof parsed.type === "string" &&
+                  (parsed.type === "message_start" ||
+                    parsed.type === "message_delta" ||
+                    parsed.type === "content_block_start" ||
+                    parsed.type === "content_block_delta" ||
+                    parsed.type === "content_block_stop" ||
+                    parsed.type === "message_stop");
+
+                if (isResponsesSSE || isClaudeSSE) {
+                  // Non-OpenAI SSE: extract usage, track content, forward payload as-is
                   const extracted = extractUsage(parsed);
                   if (extracted) {
                     usage = extracted;
@@ -193,6 +205,13 @@ export function createSSEStream(options: StreamOptions = {}) {
                   // Track content length from Responses format
                   if (parsed.delta && typeof parsed.delta === "string") {
                     totalContentLength += parsed.delta.length;
+                  }
+                  // Track content length from Claude format
+                  if (parsed.delta?.text && typeof parsed.delta.text === "string") {
+                    totalContentLength += parsed.delta.text.length;
+                  }
+                  if (parsed.delta?.thinking && typeof parsed.delta.thinking === "string") {
+                    totalContentLength += parsed.delta.thinking.length;
                   }
                 } else {
                   // Chat Completions: full sanitization pipeline
@@ -401,6 +420,10 @@ export function createSSEStream(options: StreamOptions = {}) {
           if (buffer.trim()) {
             const parsed = parseSSELine(buffer.trim());
             if (parsed && !parsed.done) {
+              // Extract usage from remaining buffer (was missing — caused 0 tokens in call_logs)
+              const extracted = extractUsage(parsed);
+              if (extracted) state.usage = extracted;
+
               const translated = translateResponse(targetFormat, sourceFormat, parsed, state);
 
               // Log OpenAI intermediate chunks

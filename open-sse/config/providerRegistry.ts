@@ -356,6 +356,7 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       { id: "claude-sonnet-4", name: "Claude Sonnet 4" },
       { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
       { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro" },
       { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview" },
       { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
       { id: "grok-code-fast-1", name: "Grok Code Fast 1" },
