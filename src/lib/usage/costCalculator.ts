@@ -55,6 +55,30 @@ export async function calculateCost(provider, model, tokens) {
         pricing = await getPricingForModel(provider, normalized);
       }
     }
+
+    // Fallback: for user-defined providers (anthropic-compatible-*, openai-compatible-*, etc.)
+    // try to infer pricing from the model name by checking known provider pricing tables
+    if (!pricing) {
+      const modelLower = (model || "").toLowerCase();
+      const fallbackProviders: string[] = [];
+      if (modelLower.includes("claude") || modelLower.includes("minimax")) {
+        fallbackProviders.push("anthropic", "minimax", "cc");
+      } else if (modelLower.includes("gpt") || modelLower.includes("codex")) {
+        fallbackProviders.push("openai", "cx");
+      } else if (modelLower.includes("gemini")) {
+        fallbackProviders.push("gemini", "gc");
+      }
+      for (const fp of fallbackProviders) {
+        pricing = await getPricingForModel(fp, model);
+        if (pricing) break;
+        const normalized = normalizeModelName(model);
+        if (normalized !== model) {
+          pricing = await getPricingForModel(fp, normalized);
+          if (pricing) break;
+        }
+      }
+    }
+
     if (!pricing) return 0;
 
     const pricingRecord =

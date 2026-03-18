@@ -672,6 +672,8 @@ export const REGISTRY: Record<string, RegistryEntry> = {
       "Anthropic-Beta": "claude-code-20250219,interleaved-thinking-2025-05-14",
     },
     models: [
+      { id: "minimax-m2.7", name: "MiniMax M2.7" },
+      { id: "MiniMax-M2.7", name: "MiniMax M2.7 (Legacy Alias)" },
       { id: "minimax-m2.5", name: "MiniMax M2.5" },
       { id: "MiniMax-M2.5", name: "MiniMax M2.5 (Legacy Alias)" },
       { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
@@ -693,6 +695,8 @@ export const REGISTRY: Record<string, RegistryEntry> = {
     },
     models: [
       // Keep parity with minimax to ensure model discovery works for minimax-cn connections.
+      { id: "minimax-m2.7", name: "MiniMax M2.7" },
+      { id: "MiniMax-M2.7", name: "MiniMax M2.7 (Legacy Alias)" },
       { id: "minimax-m2.5", name: "MiniMax M2.5" },
       { id: "MiniMax-M2.5", name: "MiniMax M2.5 (Legacy Alias)" },
       { id: "MiniMax-M2.1", name: "MiniMax M2.1" },

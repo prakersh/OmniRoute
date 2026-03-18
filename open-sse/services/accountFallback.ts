@@ -317,6 +317,16 @@ export function checkFallbackError(
       };
     }
 
+    // MiniMax intermittent "plan not support model" — retry immediately on same account
+    // MiniMax sometimes returns 500 for models the plan DOES support (transient backend issue)
+    if (lowerError.includes("plan not support")) {
+      return {
+        shouldFallback: true,
+        cooldownMs: 500, // Very short — retry same account after 500ms
+        reason: RateLimitReason.SERVER_ERROR,
+      };
+    }
+
     // Rate limit keywords - exponential backoff
     if (
       lowerError.includes("rate limit") ||

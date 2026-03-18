@@ -32,13 +32,64 @@ export const DEFAULT_PRICING = {
 
   // OpenAI Codex (cx)
   cx: {
-    // Issue #334: add gpt5.4
+    // GPT 5.4 — latest Codex flagship
+    "gpt-5.4": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
     "gpt5.4": {
       input: 5.0,
       output: 20.0,
       cached: 2.5,
       reasoning: 30.0,
       cache_creation: 5.0,
+    },
+    // GPT 5.3 Codex family — same pricing tier as 5.2
+    "gpt-5.3-codex": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-xhigh": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-high": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-low": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    "gpt-5.3-codex-none": {
+      input: 5.0,
+      output: 20.0,
+      cached: 2.5,
+      reasoning: 30.0,
+      cache_creation: 5.0,
+    },
+    // GPT 5.1 Codex Mini High — same tier as mini
+    "gpt-5.1-codex-mini-high": {
+      input: 1.5,
+      output: 6.0,
+      cached: 0.75,
+      reasoning: 9.0,
+      cache_creation: 1.5,
     },
     "gpt-5.2-codex": {
       input: 5.0,
@@ -712,6 +763,21 @@ export const DEFAULT_PRICING = {
       cache_creation: 0.3,
     },
     "MiniMax-M2.5": {
+      input: 0.3,
+      output: 1.2,
+      cached: 0.15,
+      reasoning: 1.8,
+      cache_creation: 0.3,
+    },
+    // MiniMax M2.7 — same pricing as M2.5
+    "minimax-m2.7": {
+      input: 0.3,
+      output: 1.2,
+      cached: 0.15,
+      reasoning: 1.8,
+      cache_creation: 0.3,
+    },
+    "MiniMax-M2.7": {
       input: 0.3,
       output: 1.2,
       cached: 0.15,
