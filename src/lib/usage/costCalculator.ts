@@ -96,7 +96,9 @@ export async function calculateCost(provider, model, tokens) {
     const inputTokens = tokens.input ?? tokens.prompt_tokens ?? tokens.input_tokens ?? 0;
     const cachedTokens =
       tokens.cacheRead ?? tokens.cached_tokens ?? tokens.cache_read_input_tokens ?? 0;
-    const nonCachedInput = Math.max(0, inputTokens - cachedTokens);
+    const cacheCreationTokens = tokens.cacheCreation ?? tokens.cache_creation_input_tokens ?? 0;
+    // nonCachedInput = total input minus cached reads and cache creation (each billed separately)
+    const nonCachedInput = Math.max(0, inputTokens - cachedTokens - cacheCreationTokens);
     cost += nonCachedInput * (inputPrice / 1000000);
 
     if (cachedTokens > 0) {
@@ -111,7 +113,6 @@ export async function calculateCost(provider, model, tokens) {
       cost += reasoningTokens * (reasoningPrice / 1000000);
     }
 
-    const cacheCreationTokens = tokens.cacheCreation ?? tokens.cache_creation_input_tokens ?? 0;
     if (cacheCreationTokens > 0) {
       cost += cacheCreationTokens * (cacheCreationPrice / 1000000);
     }
