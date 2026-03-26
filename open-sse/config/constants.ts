@@ -3,6 +3,13 @@ import { loadProviderCredentials } from "./credentialLoader.ts";
 // Timeout for non-streaming fetch requests (ms). Prevents stalled connections.
 export const FETCH_TIMEOUT_MS = parseInt(process.env.FETCH_TIMEOUT_MS || "600000", 10);
 
+// Max time to wait for upstream response headers on streaming requests (ms).
+// Prevents indefinite hangs when an upstream never starts sending SSE.
+export const STREAM_CONNECT_TIMEOUT_MS = parseInt(
+  process.env.STREAM_CONNECT_TIMEOUT_MS || "45000",
+  10
+);
+
 // Idle timeout for SSE streams (ms). Closes stream if no data for this duration.
 // Default: 120s balances deep-reasoning pauses with fast zombie stream detection (#473).
 // Extended-thinking models rarely pause >90s between chunks. Override with STREAM_IDLE_TIMEOUT_MS env var.

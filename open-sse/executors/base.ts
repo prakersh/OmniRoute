@@ -1,4 +1,4 @@
-import { HTTP_STATUS, FETCH_TIMEOUT_MS } from "../config/constants.ts";
+import { HTTP_STATUS, FETCH_TIMEOUT_MS, STREAM_CONNECT_TIMEOUT_MS } from "../config/constants.ts";
 import { applyFingerprint, isCliCompatEnabled } from "../config/cliFingerprints.ts";
 import { getRotatingApiKey } from "../services/apiKeyRotator.ts";
 
@@ -92,6 +92,23 @@ function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal): AbortS
   primary.addEventListener("abort", abortBoth, { once: true });
   secondary.addEventListener("abort", abortBoth, { once: true });
   return controller.signal;
+}
+
+function createTimeoutController(timeoutMs: number) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  if (typeof timeoutId === "object" && "unref" in timeoutId) {
+    (timeoutId as { unref?: () => void }).unref?.();
+  }
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timeoutId),
+    didTimeout: () => timedOut,
+  };
 }
 
 /**
@@ -263,10 +280,21 @@ export class BaseExecutor {
 
       const transformedBody = this.transformRequest(model, body, stream, credentials);
 
+      let timeoutControl: {
+        signal: AbortSignal;
+        clear: () => void;
+        didTimeout: () => boolean;
+      } | null = null;
       try {
-        // For non-streaming requests, apply a fetch timeout to prevent stalled connections.
-        // Streaming requests skip the timeout — they use stream idle detection instead.
-        const timeoutSignal = !stream ? AbortSignal.timeout(FETCH_TIMEOUT_MS) : null;
+        // Apply a timeout guard for both request types:
+        // - non-stream: full request timeout (legacy behavior)
+        // - stream: connection/header timeout only (stream idle handled elsewhere)
+        const timeoutSignal = !stream
+          ? AbortSignal.timeout(FETCH_TIMEOUT_MS)
+          : (() => {
+              timeoutControl = createTimeoutController(STREAM_CONNECT_TIMEOUT_MS);
+              return timeoutControl.signal;
+            })();
         const combinedSignal =
           signal && timeoutSignal
             ? mergeAbortSignals(signal, timeoutSignal)
@@ -319,8 +347,18 @@ export class BaseExecutor {
       } catch (error) {
         // Distinguish timeout errors from other abort errors
         const err = error instanceof Error ? error : new Error(String(error));
+        const isStreamConnectTimeout =
+          stream &&
+          timeoutControl?.didTimeout?.() &&
+          (err.name === "AbortError" || err.name === "TimeoutError") &&
+          STREAM_CONNECT_TIMEOUT_MS > 0;
         if (err.name === "TimeoutError") {
           log?.warn?.("TIMEOUT", `Fetch timeout after ${FETCH_TIMEOUT_MS}ms on ${url}`);
+        } else if (isStreamConnectTimeout) {
+          log?.warn?.(
+            "TIMEOUT",
+            `Stream connect timeout after ${STREAM_CONNECT_TIMEOUT_MS}ms on ${url}`
+          );
         }
         lastError = err;
         if (urlIndex + 1 < fallbackCount) {
@@ -328,6 +366,8 @@ export class BaseExecutor {
           continue;
         }
         throw err;
+      } finally {
+        timeoutControl?.clear();
       }
     }
 

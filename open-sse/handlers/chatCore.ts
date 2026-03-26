@@ -88,6 +88,16 @@ export function shouldUseNativeCodexPassthrough({
   return segments.includes("responses");
 }
 
+async function safeInvokeCallback(log, label, callback, ...args) {
+  if (typeof callback !== "function") return;
+  try {
+    await callback(...args);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log?.warn?.("CALLBACK", `${label} failed: ${message}`);
+  }
+}
+
 /**
  * Core chat handler - shared between SSE and Worker
  * Returns { success, response, status, error } for caller to handle fallback
@@ -723,9 +733,12 @@ export async function handleChatCore({
       Object.assign(credentials, newCredentials);
 
       // Notify caller about refreshed credentials
-      if (onCredentialsRefreshed && newCredentials) {
-        await onCredentialsRefreshed(newCredentials);
-      }
+      await safeInvokeCallback(
+        log,
+        "onCredentialsRefreshed",
+        onCredentialsRefreshed,
+        newCredentials
+      );
 
       // Retry with new credentials — model + extra headers follow translatedBody.model so they
       // stay aligned if this block ever runs after a path that mutates body.model (e.g. fallback).
@@ -994,9 +1007,7 @@ export async function handleChatCore({
     }
 
     // Notify success - caller can clear error status if needed
-    if (onRequestSuccess) {
-      await onRequestSuccess();
-    }
+    await safeInvokeCallback(log, "onRequestSuccess", onRequestSuccess);
 
     // Log usage for non-streaming responses
     const usage = extractUsageFromResponse(responseBody, provider);
@@ -1127,9 +1138,7 @@ export async function handleChatCore({
   // Streaming response
 
   // Notify success - caller can clear error status if needed
-  if (onRequestSuccess) {
-    await onRequestSuccess();
-  }
+  await safeInvokeCallback(log, "onRequestSuccess", onRequestSuccess);
 
   const responseHeaders = {
     "Content-Type": "text/event-stream",

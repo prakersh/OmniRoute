@@ -40,6 +40,35 @@ const MIN_HISTORY_SAMPLES = 10;
 // Resets on server restart (by design — no stale state)
 const rrCounters = new Map();
 
+function parseTimeoutMs(value, fallbackMs) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return fallbackMs;
+}
+
+async function awaitWithTimeout(promise, timeoutMs, label) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const err = new Error(`${label} timed out after ${timeoutMs}ms`);
+          err.name = "TimeoutError";
+          reject(err);
+        }, timeoutMs);
+        if (timeoutId && typeof timeoutId === "object" && "unref" in timeoutId) {
+          (timeoutId as { unref?: () => void }).unref?.();
+        }
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Normalize a model entry to { model, weight }
  * Supports both legacy string format and new object format
@@ -587,6 +616,7 @@ export async function handleComboChat({
     : { ...getDefaultComboConfig(), ...(combo.config || {}) };
   const maxRetries = config.maxRetries ?? 1;
   const retryDelayMs = config.retryDelayMs ?? 2000;
+  const modelTimeoutMs = parseTimeoutMs(config.timeoutMs, 120000);
 
   let orderedModels;
 
@@ -815,7 +845,27 @@ export async function handleComboChat({
         `Trying model ${i + 1}/${orderedModels.length}: ${modelStr}${retry > 0 ? ` (retry ${retry})` : ""}`
       );
 
-      const result = await handleSingleModelWrapped(body, modelStr);
+      let result;
+      try {
+        result = await awaitWithTimeout(
+          handleSingleModelWrapped(body, modelStr),
+          modelTimeoutMs,
+          `Model ${modelStr}`
+        );
+      } catch (err) {
+        const errorText = err?.message || "Model execution failed";
+        const status = err?.name === "TimeoutError" ? 504 : 502;
+        lastError = errorText;
+        if (!lastStatus) lastStatus = status;
+        if (i > 0) fallbackCount++;
+        breaker._onFailure();
+        log.warn("COMBO", `Model ${modelStr} execution error, trying next`, {
+          status,
+          timeoutMs: modelTimeoutMs,
+          error: errorText,
+        });
+        break;
+      }
 
       // Success — return response
       if (result.ok) {
@@ -987,6 +1037,7 @@ async function handleRoundRobinCombo({
   const queueTimeout = config.queueTimeoutMs ?? 30000;
   const maxRetries = config.maxRetries ?? 1;
   const retryDelayMs = config.retryDelayMs ?? 2000;
+  const modelTimeoutMs = parseTimeoutMs(config.timeoutMs, 120000);
 
   // Resolve models (support nested combos)
   let orderedModels;
@@ -1074,7 +1125,27 @@ async function handleRoundRobinCombo({
           `[RR #${counter}] → ${modelStr}${offset > 0 ? ` (fallback +${offset})` : ""}${retry > 0 ? ` (retry ${retry})` : ""}`
         );
 
-        const result = await handleSingleModel(body, modelStr);
+        let result;
+        try {
+          result = await awaitWithTimeout(
+            handleSingleModel(body, modelStr),
+            modelTimeoutMs,
+            `Model ${modelStr}`
+          );
+        } catch (err) {
+          const errorText = err?.message || "Model execution failed";
+          const status = err?.name === "TimeoutError" ? 504 : 502;
+          lastError = errorText;
+          if (!lastStatus) lastStatus = status;
+          if (offset > 0) fallbackCount++;
+          breaker._onFailure();
+          log.warn("COMBO-RR", `${modelStr} execution error, trying next model`, {
+            status,
+            timeoutMs: modelTimeoutMs,
+            error: errorText,
+          });
+          break;
+        }
 
         // Success
         if (result.ok) {
