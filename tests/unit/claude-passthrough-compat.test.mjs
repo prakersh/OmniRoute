@@ -41,6 +41,7 @@ test("normalizeClaudePassthroughForProvider strips unsupported fields for non-na
   assert.ok("output_config" in input, "input object should not be mutated");
   assert.equal(body.output_config, undefined);
   assert.equal(body.tools, undefined);
+  assert.equal(body.tool_choice, undefined);
   assert.equal(
     body.system,
     'You are Claude Code, Anthropic\'s official CLI for Claude.\n\nReturn JSON with only {"name":"..."}'
@@ -71,7 +72,59 @@ test("normalizeClaudePassthroughForProvider removes only invalid tool definition
     body.tools.map((tool) => tool.name ?? tool.function?.name),
     ["ok_tool", "ok_fn"]
   );
-  assert.equal(strippedFields.includes("tools(empty-name)"), true);
+  assert.equal(strippedFields.includes("tools(invalid)"), true);
+});
+
+test("normalizeClaudePassthroughForProvider strips tools missing input_schema entirely", () => {
+  const input = {
+    tools: [
+      { name: "no_schema_tool" }, // no input_schema at all
+      { name: "valid_tool", input_schema: { type: "object" } },
+    ],
+  };
+
+  const { body, strippedFields } = normalizeClaudePassthroughForProvider(input, "minimax");
+
+  assert.equal(body.tools.length, 1);
+  assert.equal(body.tools[0].name, "valid_tool");
+  assert.equal(strippedFields.includes("tools(invalid)"), true);
+});
+
+test("normalizeClaudePassthroughForProvider strips empty-name tool_use from messages", () => {
+  const input = {
+    messages: [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me run that." },
+          { type: "tool_use", id: "call_1", name: "", input: {} },
+          { type: "tool_use", id: "call_2", name: "valid_tool", input: { x: 1 } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "call_1", content: "result1" },
+          { type: "tool_result", tool_use_id: "call_2", content: "result2" },
+        ],
+      },
+    ],
+  };
+
+  const { body, strippedFields } = normalizeClaudePassthroughForProvider(input, "minimax");
+
+  // Empty-name tool_use should be stripped
+  const assistantContent = body.messages[0].content;
+  assert.equal(assistantContent.length, 2); // text + valid tool_use
+  assert.equal(assistantContent[0].type, "text");
+  assert.equal(assistantContent[1].name, "valid_tool");
+
+  // Orphaned tool_result (call_1) should be stripped, call_2 kept
+  const userContent = body.messages[1].content;
+  assert.equal(userContent.length, 1);
+  assert.equal(userContent[0].tool_use_id, "call_2");
+
+  assert.equal(strippedFields.includes("messages(sanitized)"), true);
 });
 
 test("normalizeClaudePassthroughForProvider keeps native Claude payload untouched", () => {
