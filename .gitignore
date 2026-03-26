@@ -134,3 +134,9 @@ vscode-extension/
 
 # Compiled npm-package build artifact (not source, should not be in git)
 /app
+*.sqlite
+.tmp-omni-db/
+.tmp-omni-db/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
