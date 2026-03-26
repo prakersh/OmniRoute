@@ -29,6 +29,7 @@ const STATUS_FILTERS = [
 const COLUMNS = [
   { key: "status", label: "Status" },
   { key: "model", label: "Model" },
+  { key: "requestedModel", label: "Requested" },
   { key: "provider", label: "Provider" },
   { key: "protocol", label: "Protocol" },
   { key: "account", label: "Account" },
@@ -234,7 +235,9 @@ export default function RequestLoggerV2() {
   // Unique accounts and providers for dropdowns
 
   const uniqueAccounts = [...new Set(logs.map((l) => l.account).filter((a) => a && a !== "-"))];
-  const uniqueModels = [...new Set(logs.map((l) => l.model).filter(Boolean))].sort();
+  const uniqueModels = [
+    ...new Set(logs.flatMap((l) => [l.model, l.requestedModel]).filter((value) => Boolean(value))),
+  ].sort();
   const uniqueProviders = [
     ...new Set(logs.map((l) => l.provider).filter((p) => p && p !== "-")),
   ].sort();
@@ -258,7 +261,7 @@ export default function RequestLoggerV2() {
           onClick={() => setRecording(!recording)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
             recording
-              ? "bg-red-500/10 border-red-500/30 text-red-400"
+              ? "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400"
               : "bg-bg-subtle border-border text-text-muted"
           }`}
         >
@@ -413,11 +416,11 @@ export default function RequestLoggerV2() {
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
               activeFilter === f.key
                 ? f.key === "error"
-                  ? "bg-red-500/20 text-red-400 border-red-500/40"
+                  ? "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/40"
                   : f.key === "ok"
-                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/40"
                     : f.key === "combo"
-                      ? "bg-violet-500/20 text-violet-300 border-violet-500/40"
+                      ? "bg-violet-500/20 text-violet-700 dark:text-violet-300 border-violet-500/40"
                       : "bg-primary text-white border-primary"
                 : "bg-bg-subtle border-border text-text-muted hover:border-text-muted"
             }`}
@@ -514,6 +517,11 @@ export default function RequestLoggerV2() {
                       Model
                     </th>
                   )}
+                  {visibleColumns.requestedModel && (
+                    <th className="px-3 py-2.5 font-semibold text-text-muted uppercase tracking-wider text-[10px]">
+                      Requested
+                    </th>
+                  )}
                   {visibleColumns.provider && (
                     <th className="px-3 py-2.5 font-semibold text-text-muted uppercase tracking-wider text-[10px]">
                       Provider
@@ -596,6 +604,28 @@ export default function RequestLoggerV2() {
                           {log.model}
                         </td>
                       )}
+                      {visibleColumns.requestedModel && (
+                        <td className="px-3 py-2 font-mono text-[11px]">
+                          {log.requestedModel ? (
+                            <span
+                              className={
+                                log.requestedModel !== log.model
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-text-muted"
+                              }
+                              title={
+                                log.requestedModel !== log.model
+                                  ? `Requested ${log.requestedModel}, routed as ${log.model}`
+                                  : log.requestedModel
+                              }
+                            >
+                              {log.requestedModel}
+                            </span>
+                          ) : (
+                            <span className="text-text-muted text-[10px]">—</span>
+                          )}
+                        </td>
+                      )}
                       {visibleColumns.provider && (
                         <td className="px-3 py-2">
                           <span
@@ -635,7 +665,7 @@ export default function RequestLoggerV2() {
                       {visibleColumns.combo && (
                         <td className="px-3 py-2">
                           {log.comboName ? (
-                            <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30">
+                            <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-800 dark:text-violet-300 border border-violet-500/40">
                               {log.comboName}
                             </span>
                           ) : (

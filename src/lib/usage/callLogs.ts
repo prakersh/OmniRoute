@@ -180,15 +180,18 @@ export async function saveCallLog(entry: any) {
       path: entry.path || "/v1/chat/completions",
       status: entry.status || 0,
       model: entry.model || "-",
+      requestedModel: entry.requestedModel || null, // T01: model the client asked for
       provider: entry.provider || "-",
       account,
       connectionId: entry.connectionId || null,
       duration: entry.duration || 0,
-      tokensIn:
-        (entry.tokens?.prompt_tokens || entry.tokens?.input_tokens || 0) +
-        (entry.tokens?.cache_read_input_tokens || entry.tokens?.cached_tokens || 0) +
-        (entry.tokens?.cache_creation_input_tokens || 0),
-      tokensOut: entry.tokens?.completion_tokens || entry.tokens?.output_tokens || 0,
+      tokensIn: toNumber(
+        (entry.tokens?.prompt_tokens ?? entry.tokens?.input_tokens ?? 0) +
+          (entry.tokens?.cache_read_input_tokens ?? entry.tokens?.cached_tokens ?? 0) +
+          (entry.tokens?.cache_creation_input_tokens ?? 0)
+      ),
+      tokensOut: toNumber(entry.tokens?.completion_tokens ?? entry.tokens?.output_tokens ?? 0),
+      requestType: entry.requestType || null,
       sourceFormat: entry.sourceFormat || null,
       targetFormat: entry.targetFormat || null,
       apiKeyId,
@@ -203,11 +206,11 @@ export async function saveCallLog(entry: any) {
     const db = getDbInstance();
     db.prepare(
       `
-      INSERT INTO call_logs (id, timestamp, method, path, status, model, provider,
-        account, connection_id, duration, tokens_in, tokens_out, source_format, target_format,
+      INSERT INTO call_logs (id, timestamp, method, path, status, model, requested_model, provider,
+        account, connection_id, duration, tokens_in, tokens_out, request_type, source_format, target_format,
         api_key_id, api_key_name, combo_name, request_body, response_body, error)
-      VALUES (@id, @timestamp, @method, @path, @status, @model, @provider,
-        @account, @connectionId, @duration, @tokensIn, @tokensOut, @sourceFormat, @targetFormat,
+      VALUES (@id, @timestamp, @method, @path, @status, @model, @requestedModel, @provider,
+        @account, @connectionId, @duration, @tokensIn, @tokensOut, @requestType, @sourceFormat, @targetFormat,
         @apiKeyId, @apiKeyName, @comboName, @requestBody, @responseBody, @error)
     `
     ).run(logEntry);
@@ -327,7 +330,7 @@ export async function getCallLogs(filter: any = {}) {
   }
 
   if (filter.model) {
-    conditions.push("model LIKE @modelQ");
+    conditions.push("(model LIKE @modelQ OR requested_model LIKE @modelQ)");
     params.modelQ = `%${filter.model}%`;
   }
   if (filter.provider) {
@@ -348,7 +351,8 @@ export async function getCallLogs(filter: any = {}) {
   if (filter.search) {
     conditions.push(`(
       model LIKE @searchQ OR path LIKE @searchQ OR account LIKE @searchQ OR
-      provider LIKE @searchQ OR api_key_name LIKE @searchQ OR api_key_id LIKE @searchQ OR
+      requested_model LIKE @searchQ OR provider LIKE @searchQ OR
+      api_key_name LIKE @searchQ OR api_key_id LIKE @searchQ OR
       combo_name LIKE @searchQ OR CAST(status AS TEXT) LIKE @searchQ
     )`);
     params.searchQ = `%${filter.search}%`;
@@ -372,6 +376,7 @@ export async function getCallLogs(filter: any = {}) {
       path: toStringOrNull(l.path),
       status: toNumber(l.status),
       model: toStringOrNull(l.model),
+      requestedModel: toStringOrNull(l.requested_model), // T01: original model from client
       provider: toStringOrNull(l.provider),
       account: toStringOrNull(l.account),
       duration: toNumber(l.duration),
@@ -404,6 +409,7 @@ export async function getCallLogById(id: string) {
     path: toStringOrNull(entryRow.path),
     status: toNumber(entryRow.status),
     model: toStringOrNull(entryRow.model),
+    requestedModel: toStringOrNull(entryRow.requested_model),
     provider: toStringOrNull(entryRow.provider),
     account: toStringOrNull(entryRow.account),
     connectionId: toStringOrNull(entryRow.connection_id),

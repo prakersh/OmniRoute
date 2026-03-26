@@ -14,8 +14,9 @@ import { getAllImageModels } from "@omniroute/open-sse/config/imageRegistry.ts";
 import { getAllRerankModels } from "@omniroute/open-sse/config/rerankRegistry.ts";
 import { getAllAudioModels } from "@omniroute/open-sse/config/audioRegistry.ts";
 import { getAllModerationModels } from "@omniroute/open-sse/config/moderationRegistry.ts";
-import { getAllVideoModels, getVideoProvider } from "@omniroute/open-sse/config/videoRegistry.ts";
-import { getAllMusicModels, getMusicProvider } from "@omniroute/open-sse/config/musicRegistry.ts";
+import { getAllVideoModels } from "@omniroute/open-sse/config/videoRegistry.ts";
+import { getAllMusicModels } from "@omniroute/open-sse/config/musicRegistry.ts";
+import { REGISTRY } from "@omniroute/open-sse/config/providerRegistry.ts";
 
 const FALLBACK_ALIAS_TO_PROVIDER = {
   ag: "antigravity",
@@ -190,6 +191,7 @@ export async function getUnifiedModelsResponse(
         permission: [],
         root: combo.name,
         parent: null,
+        ...(combo.context_length ? { context_length: combo.context_length } : {}),
       });
     }
 
@@ -206,8 +208,15 @@ export async function getUnifiedModelsResponse(
         continue;
       }
 
+      // Get default context length from registry (provider-level default)
+      const registryEntry = REGISTRY[alias] || REGISTRY[canonicalProviderId];
+      const defaultContextLength = registryEntry?.defaultContextLength;
+
       for (const model of providerModels) {
         const aliasId = `${alias}/${model.id}`;
+        // Model-level context length overrides provider default
+        const contextLength = model.contextLength || defaultContextLength;
+
         models.push({
           id: aliasId,
           object: "model",
@@ -216,6 +225,7 @@ export async function getUnifiedModelsResponse(
           permission: [],
           root: model.id,
           parent: null,
+          ...(contextLength ? { context_length: contextLength } : {}),
         });
 
         // Add provider-id prefix in addition to short alias (ex: kiro/model + kr/model).
@@ -229,6 +239,7 @@ export async function getUnifiedModelsResponse(
             permission: [],
             root: model.id,
             parent: aliasId,
+            ...(contextLength ? { context_length: contextLength } : {}),
           });
         }
       }
@@ -304,10 +315,9 @@ export async function getUnifiedModelsResponse(
       });
     }
 
-    // Add video models (local providers always listed, cloud filtered by active)
+    // Add video models (filtered by active providers)
     for (const videoModel of getAllVideoModels()) {
-      const vConfig = getVideoProvider(videoModel.provider);
-      if (vConfig?.authType !== "none" && !isProviderActive(videoModel.provider)) continue;
+      if (!isProviderActive(videoModel.provider)) continue;
       models.push({
         id: videoModel.id,
         object: "model",
@@ -317,10 +327,9 @@ export async function getUnifiedModelsResponse(
       });
     }
 
-    // Add music models (local providers always listed, cloud filtered by active)
+    // Add music models (filtered by active providers)
     for (const musicModel of getAllMusicModels()) {
-      const mConfig = getMusicProvider(musicModel.provider);
-      if (mConfig?.authType !== "none" && !isProviderActive(musicModel.provider)) continue;
+      if (!isProviderActive(musicModel.provider)) continue;
       models.push({
         id: musicModel.id,
         object: "model",

@@ -15,6 +15,7 @@ const DOC_SOURCE_FILES = [
   "FEATURES.md",
   "TROUBLESHOOTING.md",
   "USER_GUIDE.md",
+  "VM_DEPLOYMENT_GUIDE.md",
 ];
 
 const LOCALE_SPECS = [
@@ -287,6 +288,15 @@ const LOCALE_SPECS = [
     languageName: "Filipino",
     readmeName: "Filipino",
     docsName: "Filipino",
+  },
+  {
+    code: "cs",
+    googleTl: "cs",
+    label: "CS",
+    flag: "🇨🇿",
+    languageName: "Čeština",
+    readmeName: "Čeština",
+    docsName: "Čeština",
   },
 ];
 

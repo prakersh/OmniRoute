@@ -13,29 +13,21 @@ import {
   EmptyState,
 } from "@/shared/components";
 import Tooltip from "@/shared/components/Tooltip";
+import ModelRoutingSection from "@/shared/components/ModelRoutingSection";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { useNotificationStore } from "@/store/notificationStore";
+import { ROUTING_STRATEGIES } from "@/shared/constants/routingStrategies";
 import { useTranslations } from "next-intl";
 
 // Validate combo name: letters, numbers, -, _, /, .
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_/.-]+$/;
 
-const STRATEGY_OPTIONS = [
-  { value: "priority", labelKey: "priority", descKey: "priorityDesc", icon: "sort" },
-  { value: "weighted", labelKey: "weighted", descKey: "weightedDesc", icon: "percent" },
-  { value: "round-robin", labelKey: "roundRobin", descKey: "roundRobinDesc", icon: "autorenew" },
-  { value: "random", labelKey: "random", descKey: "randomDesc", icon: "shuffle" },
-  { value: "least-used", labelKey: "leastUsed", descKey: "leastUsedDesc", icon: "low_priority" },
-  { value: "cost-optimized", labelKey: "costOpt", descKey: "costOptimizedDesc", icon: "savings" },
-  {
-    value: "fill-first",
-    labelKey: "fillFirst",
-    descKey: "fillFirstDesc",
-    icon: "stacked_bar_chart",
-  },
-  { value: "p2c", labelKey: "p2c", descKey: "p2cDesc", icon: "compare_arrows" },
-  { value: "strict-random", labelKey: "strictRandom", descKey: "strictRandomDesc", icon: "casino" },
-];
+const STRATEGY_OPTIONS = ROUTING_STRATEGIES.map((strategy) => ({
+  value: strategy.value,
+  labelKey: strategy.labelKey,
+  descKey: strategy.combosDescKey,
+  icon: strategy.icon,
+}));
 
 const STRATEGY_GUIDANCE_FALLBACK = {
   priority: {
@@ -597,6 +589,9 @@ export default function CombosPage() {
           </div>
         </Card>
       )}
+
+      {/* Model Routing Rules (#563) */}
+      <ModelRoutingSection combos={combos} />
 
       {/* Combos List */}
       {combos.length === 0 ? (
@@ -1181,6 +1176,12 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
   const [config, setConfig] = useState(combo?.config || {});
   const [showStrategyNudge, setShowStrategyNudge] = useState(false);
   const strategyChangeMountedRef = useRef(false);
+  // Agent features (#399 / #401 / #454)
+  const [agentSystemMessage, setAgentSystemMessage] = useState<string>(combo?.system_message || "");
+  const [agentToolFilter, setAgentToolFilter] = useState<string>(combo?.tool_filter_regex || "");
+  const [agentContextCache, setAgentContextCache] = useState<boolean>(
+    !!combo?.context_cache_protection
+  );
 
   // DnD state
   const hasPricingForModel = useCallback(
@@ -1531,6 +1532,14 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
     if (Object.keys(configToSave).length > 0) {
       saveData.config = configToSave;
     }
+
+    // Agent features (#399 / #401 / #454)
+    if (agentSystemMessage.trim()) saveData.system_message = agentSystemMessage.trim();
+    else delete saveData.system_message;
+    if (agentToolFilter.trim()) saveData.tool_filter_regex = agentToolFilter.trim();
+    else delete saveData.tool_filter_regex;
+    if (agentContextCache) saveData.context_cache_protection = true;
+    else delete saveData.context_cache_protection;
 
     await onSave(saveData);
     setSaving(false);
@@ -2051,6 +2060,72 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
               <p className="text-[10px] text-text-muted">{t("advancedHint")}</p>
             </div>
           )}
+
+          {/* Agent Features (#399 / #401 / #454) */}
+          <div className="flex flex-col gap-2 p-3 bg-black/[0.02] dark:bg-white/[0.02] rounded-lg border border-black/5 dark:border-white/5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="material-symbols-outlined text-[14px] text-primary">smart_toy</span>
+              <p className="text-xs font-medium">Agent Features</p>
+              <span className="text-[10px] text-text-muted">
+                — optional, for agent/tool workflows
+              </span>
+            </div>
+
+            {/* System Message Override */}
+            <div>
+              <label className="text-[11px] font-medium text-text-muted block mb-0.5">
+                System Message Override
+              </label>
+              <textarea
+                rows={2}
+                value={agentSystemMessage}
+                onChange={(e) => setAgentSystemMessage(e.target.value)}
+                placeholder="Override the system prompt for all requests routed through this combo…"
+                className="w-full text-xs py-1.5 px-2 rounded border border-black/10 dark:border-white/10 bg-transparent focus:border-primary focus:outline-none resize-none"
+              />
+              <p className="text-[10px] text-text-muted mt-0.5">
+                Replaces any system message sent by the client. Leave empty to pass through client
+                system messages.
+              </p>
+            </div>
+
+            {/* Tool Filter Regex */}
+            <div>
+              <label className="text-[11px] font-medium text-text-muted block mb-0.5">
+                Tool Filter Regex
+              </label>
+              <input
+                type="text"
+                value={agentToolFilter}
+                onChange={(e) => setAgentToolFilter(e.target.value)}
+                placeholder="e.g. ^(bash|computer)$"
+                className="w-full text-xs py-1.5 px-2 rounded border border-black/10 dark:border-white/10 bg-transparent focus:border-primary focus:outline-none font-mono"
+              />
+              <p className="text-[10px] text-text-muted mt-0.5">
+                Only tools whose name matches this regex are forwarded to the provider. Leave empty
+                to forward all tools.
+              </p>
+            </div>
+
+            {/* Context Cache Protection */}
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <label className="text-[11px] font-medium text-text-muted block">
+                  Context Cache Protection
+                </label>
+                <p className="text-[10px] text-text-muted">
+                  Pins the provider/model across turns to preserve cache sessions. Internal tags are
+                  stripped before forwarding to the provider.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={agentContextCache}
+                onChange={(e) => setAgentContextCache(e.target.checked)}
+                className="accent-primary shrink-0"
+              />
+            </div>
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">

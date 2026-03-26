@@ -34,7 +34,11 @@ interface Message {
 
 // ── Context Caching Tag ─────────────────────────────────────────────────────
 
-const CACHE_TAG_PATTERN = /<omniModel>([^<]+)<\/omniModel>/;
+// Handles both actual newlines (U+000A) and literal \n sequences injected
+// by combo.ts streaming around the <omniModel> tag (#531). Non-global so that
+// .exec() and .test() stay stateless; callers that need full replacement use
+// String.prototype.replace() which replaces all non-overlapping matches.
+const CACHE_TAG_PATTERN = /(?:\\n|\n)?<omniModel>([^<]+)<\/omniModel>(?:\\n|\n)?/;
 
 /**
  * Inject the model tag into the last assistant message (or append a new one).
@@ -52,7 +56,15 @@ export function injectModelTag(messages: Message[], providerModel: string): Mess
 
   // Find last assistant message with string content
   const lastAssistantIdx = cleaned.map((m) => m.role).lastIndexOf("assistant");
-  if (lastAssistantIdx === -1) return cleaned;
+
+  // #474: If no assistant message exists yet (first turn), append a synthetic one
+  // so the tag is present when the client sends the next request with the response.
+  if (lastAssistantIdx === -1) {
+    return [
+      ...cleaned,
+      { role: "assistant", content: `\n<omniModel>${providerModel}</omniModel>` },
+    ];
+  }
 
   const msg = cleaned[lastAssistantIdx];
   if (typeof msg.content !== "string") return cleaned;
@@ -123,6 +135,20 @@ export function applyToolFilter(
   });
 }
 
+/**
+ * Strip all <omniModel> tags from message content before forwarding to the provider.
+ * The tag is an internal OmniRoute marker; providers must never see it or their
+ * cache will treat every tagged request as a new session (#454).
+ */
+export function stripModelTags(messages: Message[]): Message[] {
+  return messages.map((msg) => {
+    if (typeof msg.content === "string" && CACHE_TAG_PATTERN.test(msg.content)) {
+      return { ...msg, content: msg.content.replace(CACHE_TAG_PATTERN, "").trimEnd() };
+    }
+    return msg;
+  });
+}
+
 // ── Main Middleware ──────────────────────────────────────────────────────────
 
 /**
@@ -143,7 +169,11 @@ export function applyComboAgentMiddleware(
   if (comboConfig.context_cache_protection) {
     pinnedModel = extractPinnedModel(messages);
     if (pinnedModel) {
-      // Model is pinned — caller should override model selection
+      // (#535) Model is pinned via <omniModel> tag — override body.model so the combo
+      // router uses exactly this model instead of picking a different one. Without this,
+      // the extracted pinnedModel is returned but body.model is unchanged, breaking
+      // context cache sessions by sending subsequent turns to a different model.
+      body = { ...body, model: pinnedModel };
     }
   }
 
@@ -157,6 +187,11 @@ export function applyComboAgentMiddleware(
     body.tools as unknown[] | undefined,
     comboConfig.tool_filter_regex
   );
+
+  // 4. Strip internal <omniModel> tags before forwarding to provider (#454)
+  //    These tags are OmniRoute-internal markers and must never reach the provider
+  //    since providers would treat each tagged request as a new cache session.
+  messages = stripModelTags(messages);
 
   return {
     body: {

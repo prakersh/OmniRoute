@@ -1,6 +1,6 @@
 # API Reference
 
-🌐 **Languages:** 🇺🇸 [English](API_REFERENCE.md) | 🇧🇷 [Português (Brasil)](i18n/pt-BR/API_REFERENCE.md) | 🇪🇸 [Español](i18n/es/API_REFERENCE.md) | 🇫🇷 [Français](i18n/fr/API_REFERENCE.md) | 🇮🇹 [Italiano](i18n/it/API_REFERENCE.md) | 🇷🇺 [Русский](i18n/ru/API_REFERENCE.md) | 🇨🇳 [中文 (简体)](i18n/zh-CN/API_REFERENCE.md) | 🇩🇪 [Deutsch](i18n/de/API_REFERENCE.md) | 🇮🇳 [हिन्दी](i18n/in/API_REFERENCE.md) | 🇹🇭 [ไทย](i18n/th/API_REFERENCE.md) | 🇺🇦 [Українська](i18n/uk-UA/API_REFERENCE.md) | 🇸🇦 [العربية](i18n/ar/API_REFERENCE.md) | 🇯🇵 [日本語](i18n/ja/API_REFERENCE.md) | 🇻🇳 [Tiếng Việt](i18n/vi/API_REFERENCE.md) | 🇧🇬 [Български](i18n/bg/API_REFERENCE.md) | 🇩🇰 [Dansk](i18n/da/API_REFERENCE.md) | 🇫🇮 [Suomi](i18n/fi/API_REFERENCE.md) | 🇮🇱 [עברית](i18n/he/API_REFERENCE.md) | 🇭🇺 [Magyar](i18n/hu/API_REFERENCE.md) | 🇮🇩 [Bahasa Indonesia](i18n/id/API_REFERENCE.md) | 🇰🇷 [한국어](i18n/ko/API_REFERENCE.md) | 🇲🇾 [Bahasa Melayu](i18n/ms/API_REFERENCE.md) | 🇳🇱 [Nederlands](i18n/nl/API_REFERENCE.md) | 🇳🇴 [Norsk](i18n/no/API_REFERENCE.md) | 🇵🇹 [Português (Portugal)](i18n/pt/API_REFERENCE.md) | 🇷🇴 [Română](i18n/ro/API_REFERENCE.md) | 🇵🇱 [Polski](i18n/pl/API_REFERENCE.md) | 🇸🇰 [Slovenčina](i18n/sk/API_REFERENCE.md) | 🇸🇪 [Svenska](i18n/sv/API_REFERENCE.md) | 🇵🇭 [Filipino](i18n/phi/API_REFERENCE.md)
+🌐 **Languages:** 🇺🇸 [English](API_REFERENCE.md) | 🇧🇷 [Português (Brasil)](i18n/pt-BR/API_REFERENCE.md) | 🇪🇸 [Español](i18n/es/API_REFERENCE.md) | 🇫🇷 [Français](i18n/fr/API_REFERENCE.md) | 🇮🇹 [Italiano](i18n/it/API_REFERENCE.md) | 🇷🇺 [Русский](i18n/ru/API_REFERENCE.md) | 🇨🇳 [中文 (简体)](i18n/zh-CN/API_REFERENCE.md) | 🇩🇪 [Deutsch](i18n/de/API_REFERENCE.md) | 🇮🇳 [हिन्दी](i18n/in/API_REFERENCE.md) | 🇹🇭 [ไทย](i18n/th/API_REFERENCE.md) | 🇺🇦 [Українська](i18n/uk-UA/API_REFERENCE.md) | 🇸🇦 [العربية](i18n/ar/API_REFERENCE.md) | 🇯🇵 [日本語](i18n/ja/API_REFERENCE.md) | 🇻🇳 [Tiếng Việt](i18n/vi/API_REFERENCE.md) | 🇧🇬 [Български](i18n/bg/API_REFERENCE.md) | 🇩🇰 [Dansk](i18n/da/API_REFERENCE.md) | 🇫🇮 [Suomi](i18n/fi/API_REFERENCE.md) | 🇮🇱 [עברית](i18n/he/API_REFERENCE.md) | 🇭🇺 [Magyar](i18n/hu/API_REFERENCE.md) | 🇮🇩 [Bahasa Indonesia](i18n/id/API_REFERENCE.md) | 🇰🇷 [한국어](i18n/ko/API_REFERENCE.md) | 🇲🇾 [Bahasa Melayu](i18n/ms/API_REFERENCE.md) | 🇳🇱 [Nederlands](i18n/nl/API_REFERENCE.md) | 🇳🇴 [Norsk](i18n/no/API_REFERENCE.md) | 🇵🇹 [Português (Portugal)](i18n/pt/API_REFERENCE.md) | 🇷🇴 [Română](i18n/ro/API_REFERENCE.md) | 🇵🇱 [Polski](i18n/pl/API_REFERENCE.md) | 🇸🇰 [Slovenčina](i18n/sk/API_REFERENCE.md) | 🇸🇪 [Svenska](i18n/sv/API_REFERENCE.md) | 🇵🇭 [Filipino](i18n/phi/API_REFERENCE.md) | 🇨🇿 [Čeština](i18n/cs/API_REFERENCE.md)
 
 Complete reference for all OmniRoute API endpoints.
 
@@ -38,15 +38,20 @@ Content-Type: application/json
 
 ### Custom Headers
 
-| Header                   | Direction | Description                       |
-| ------------------------ | --------- | --------------------------------- |
-| `X-OmniRoute-No-Cache`   | Request   | Set to `true` to bypass cache     |
-| `X-OmniRoute-Progress`   | Request   | Set to `true` for progress events |
-| `Idempotency-Key`        | Request   | Dedup key (5s window)             |
-| `X-Request-Id`           | Request   | Alternative dedup key             |
-| `X-OmniRoute-Cache`      | Response  | `HIT` or `MISS` (non-streaming)   |
-| `X-OmniRoute-Idempotent` | Response  | `true` if deduplicated            |
-| `X-OmniRoute-Progress`   | Response  | `enabled` if progress tracking on |
+| Header                   | Direction | Description                                      |
+| ------------------------ | --------- | ------------------------------------------------ |
+| `X-OmniRoute-No-Cache`   | Request   | Set to `true` to bypass cache                    |
+| `X-OmniRoute-Progress`   | Request   | Set to `true` for progress events                |
+| `X-Session-Id`           | Request   | Sticky session key for external session affinity |
+| `x_session_id`           | Request   | Underscore variant also accepted (direct HTTP)   |
+| `Idempotency-Key`        | Request   | Dedup key (5s window)                            |
+| `X-Request-Id`           | Request   | Alternative dedup key                            |
+| `X-OmniRoute-Cache`      | Response  | `HIT` or `MISS` (non-streaming)                  |
+| `X-OmniRoute-Idempotent` | Response  | `true` if deduplicated                           |
+| `X-OmniRoute-Progress`   | Response  | `enabled` if progress tracking on                |
+| `X-OmniRoute-Session-Id` | Response  | Effective session ID used by OmniRoute           |
+
+> Nginx note: if you rely on underscore headers (for example `x_session_id`), enable `underscores_in_headers on;`.
 
 ---
 
@@ -137,10 +142,10 @@ The provider prefix is auto-added if missing. Mismatched models return `400`.
 
 ```bash
 # Get cache stats
-GET /api/cache
+GET /api/cache/stats
 
 # Clear all caches
-DELETE /api/cache
+DELETE /api/cache/stats
 ```
 
 Response example:
@@ -211,23 +216,23 @@ Response example:
 
 ### Settings
 
-| Endpoint                        | Method  | Description            |
-| ------------------------------- | ------- | ---------------------- |
-| `/api/settings`                 | GET/PUT | General settings       |
-| `/api/settings/proxy`           | GET/PUT | Network proxy config   |
-| `/api/settings/proxy/test`      | POST    | Test proxy connection  |
-| `/api/settings/ip-filter`       | GET/PUT | IP allowlist/blocklist |
-| `/api/settings/thinking-budget` | GET/PUT | Reasoning token budget |
-| `/api/settings/system-prompt`   | GET/PUT | Global system prompt   |
+| Endpoint                        | Method        | Description            |
+| ------------------------------- | ------------- | ---------------------- |
+| `/api/settings`                 | GET/PUT/PATCH | General settings       |
+| `/api/settings/proxy`           | GET/PUT       | Network proxy config   |
+| `/api/settings/proxy/test`      | POST          | Test proxy connection  |
+| `/api/settings/ip-filter`       | GET/PUT       | IP allowlist/blocklist |
+| `/api/settings/thinking-budget` | GET/PUT       | Reasoning token budget |
+| `/api/settings/system-prompt`   | GET/PUT       | Global system prompt   |
 
 ### Monitoring
 
-| Endpoint                 | Method     | Description             |
-| ------------------------ | ---------- | ----------------------- |
-| `/api/sessions`          | GET        | Active session tracking |
-| `/api/rate-limits`       | GET        | Per-account rate limits |
-| `/api/monitoring/health` | GET        | Health check            |
-| `/api/cache`             | GET/DELETE | Cache stats / clear     |
+| Endpoint                 | Method     | Description                                                                                          |
+| ------------------------ | ---------- | ---------------------------------------------------------------------------------------------------- |
+| `/api/sessions`          | GET        | Active session tracking                                                                              |
+| `/api/rate-limits`       | GET        | Per-account rate limits                                                                              |
+| `/api/monitoring/health` | GET        | Health check + provider summary (`catalogCount`, `configuredCount`, `activeCount`, `monitoredCount`) |
+| `/api/cache/stats`       | GET/DELETE | Cache stats / clear                                                                                  |
 
 ### Backup & Export/Import
 
@@ -272,12 +277,12 @@ GET response includes `agents[]` (id, name, binary, version, installed, protocol
 
 ### Resilience & Rate Limits
 
-| Endpoint                | Method  | Description                     |
-| ----------------------- | ------- | ------------------------------- |
-| `/api/resilience`       | GET/PUT | Get/update resilience profiles  |
-| `/api/resilience/reset` | POST    | Reset circuit breakers          |
-| `/api/rate-limits`      | GET     | Per-account rate limit status   |
-| `/api/rate-limit`       | GET     | Global rate limit configuration |
+| Endpoint                | Method    | Description                     |
+| ----------------------- | --------- | ------------------------------- |
+| `/api/resilience`       | GET/PATCH | Get/update resilience profiles  |
+| `/api/resilience/reset` | POST      | Reset circuit breakers          |
+| `/api/rate-limits`      | GET       | Per-account rate limit status   |
+| `/api/rate-limit`       | GET       | Global rate limit configuration |
 
 ### Evals
 

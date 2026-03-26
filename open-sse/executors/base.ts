@@ -2,6 +2,20 @@ import { HTTP_STATUS, FETCH_TIMEOUT_MS } from "../config/constants.ts";
 import { applyFingerprint, isCliCompatEnabled } from "../config/cliFingerprints.ts";
 import { getRotatingApiKey } from "../services/apiKeyRotator.ts";
 
+/**
+ * Sanitizes a custom API path to prevent path traversal attacks.
+ * Valid paths must start with '/', contain no '..' segments,
+ * no null bytes, and be reasonable in length.
+ */
+function sanitizePath(path: string): boolean {
+  if (typeof path !== "string") return false;
+  if (!path.startsWith("/")) return false;
+  if (path.includes("\0")) return false; // null byte
+  if (path.includes("..")) return false; // path traversal
+  if (path.length > 512) return false; // sanity limit
+  return true;
+}
+
 type JsonRecord = Record<string, unknown>;
 
 export type ProviderConfig = {
@@ -26,6 +40,7 @@ export type ProviderCredentials = {
   expiresAt?: string;
   connectionId?: string; // T07: used for API key rotation index
   providerSpecificData?: JsonRecord;
+  requestEndpointPath?: string;
 };
 
 export type ExecutorLog = {
@@ -43,7 +58,22 @@ export type ExecuteInput = {
   signal?: AbortSignal | null;
   log?: ExecutorLog | null;
   extendedContext?: boolean;
+  /** Merged after auth + CLI fingerprint headers (values override same-named defaults). */
+  upstreamExtraHeaders?: Record<string, string> | null;
 };
+
+/** Apply model-level extra upstream headers (e.g. Authentication, X-Custom-Auth). */
+export function mergeUpstreamExtraHeaders(
+  headers: Record<string, string>,
+  extra?: Record<string, string> | null
+): void {
+  if (!extra) return;
+  for (const [k, v] of Object.entries(extra)) {
+    if (typeof k === "string" && k.length > 0 && typeof v === "string") {
+      headers[k] = v;
+    }
+  }
+}
 
 function mergeAbortSignals(primary: AbortSignal, secondary: AbortSignal): AbortSignal {
   const controller = new AbortController();
@@ -102,7 +132,9 @@ export class BaseExecutor {
       const psd = credentials?.providerSpecificData;
       const baseUrl = typeof psd?.baseUrl === "string" ? psd.baseUrl : "https://api.openai.com/v1";
       const normalized = baseUrl.replace(/\/$/, "");
-      const customPath = typeof psd?.chatPath === "string" && psd.chatPath ? psd.chatPath : null;
+      // Sanitize custom path: must start with '/', no path traversal, no null bytes
+      const rawPath = typeof psd?.chatPath === "string" && psd.chatPath ? psd.chatPath : null;
+      const customPath = rawPath && sanitizePath(rawPath) ? rawPath : null;
       if (customPath) return `${normalized}${customPath}`;
       const path = this.provider.includes("responses") ? "/responses" : "/chat/completions";
       return `${normalized}${path}`;
@@ -187,7 +219,16 @@ export class BaseExecutor {
     return { status: response.status, message: bodyText || `HTTP ${response.status}` };
   }
 
-  async execute({ model, body, stream, credentials, signal, log, extendedContext }: ExecuteInput) {
+  async execute({
+    model,
+    body,
+    stream,
+    credentials,
+    signal,
+    log,
+    extendedContext,
+    upstreamExtraHeaders,
+  }: ExecuteInput) {
     const fallbackCount = this.getFallbackCount();
     let lastError: unknown = null;
     let lastStatus = 0;
@@ -241,6 +282,8 @@ export class BaseExecutor {
           bodyString = fingerprinted.bodyString;
         }
 
+        mergeUpstreamExtraHeaders(finalHeaders, upstreamExtraHeaders);
+
         const fetchOptions: RequestInit = {
           method: "POST",
           headers: finalHeaders,
@@ -272,7 +315,7 @@ export class BaseExecutor {
           continue;
         }
 
-        return { response, url, headers, transformedBody };
+        return { response, url, headers: finalHeaders, transformedBody };
       } catch (error) {
         // Distinguish timeout errors from other abort errors
         const err = error instanceof Error ? error : new Error(String(error));

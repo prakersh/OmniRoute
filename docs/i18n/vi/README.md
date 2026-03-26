@@ -11,18 +11,6 @@ _Proxy API phổ quát của bạn — một điểm cuối, hơn 36 nhà cung c
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Nhà cung cấp AI miễn phí cho các tác nhân mã hóa yêu thích của bạn
 
 _Kết nối mọi công cụ IDE hoặc CLI được hỗ trợ bởi AI thông qua OmniRoute — cổng API miễn phí để mã hóa không giới hạn._
@@ -105,6 +93,34 @@ _Kết nối mọi công cụ IDE hoặc CLI được hỗ trợ bởi AI thông
   </table>
 
 <sub>📡 Tất cả đại lý kết nối qua <code>http://localhost:20128/v1</code> hoặc <code>http://cloud.omniroute.online/v1</code> — một cấu hình, số mô hình và hạn ngạch không giới hạn</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -864,14 +880,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 API đa phương thức
 
-| Tính năng                             | Nó làm gì                                                    |
-| ------------------------------------- | ------------------------------------------------------------ |
-| 🖼️ **Tạo hình ảnh**                   | `/v1/images/generations` — 4 nhà cung cấp, hơn 9 mô hình     |
-| 📐 **Nhúng**                          | `/v1/embeddings` — 6 nhà cung cấp, hơn 9 mô hình             |
-| 🎤 **Phiên âm âm thanh**              | `/v1/audio/transcriptions` — Tương thích với lời thì thầm    |
-| 🔊 **Chuyển văn bản thành giọng nói** | `/v1/audio/speech` — Tổng hợp âm thanh từ nhiều nhà cung cấp |
-| 🛡️ **Kiểm duyệt**                     | `/v1/moderations` — Kiểm tra an toàn nội dung                |
-| 🔀 **Sắp xếp lại**                    | `/v1/rerank` — Sắp xếp lại mức độ liên quan của tài liệu     |
+| Tính năng                             | Nó làm gì                                                                                                                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Tạo hình ảnh**                   | `/v1/images/generations` — 4 nhà cung cấp, hơn 9 mô hình                                                                                                                   |
+| 📐 **Nhúng**                          | `/v1/embeddings` — 6 nhà cung cấp, hơn 9 mô hình                                                                                                                           |
+| 🎤 **Phiên âm âm thanh**              | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Chuyển văn bản thành giọng nói** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Kiểm duyệt**                     | `/v1/moderations` — Kiểm tra an toàn nội dung                                                                                                                              |
+| 🔀 **Sắp xếp lại**                    | `/v1/rerank` — Sắp xếp lại mức độ liên quan của tài liệu                                                                                                                   |
 
 ### 🛡️ Khả năng phục hồi và bảo mật
 

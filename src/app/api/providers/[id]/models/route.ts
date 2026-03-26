@@ -4,6 +4,7 @@ import {
   isOpenAICompatibleProvider,
   isAnthropicCompatibleProvider,
 } from "@/shared/constants/providers";
+import { PROVIDER_MODELS } from "@/shared/constants/models";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -28,8 +29,16 @@ type ProviderModelsConfigEntry = {
   parseResponse: (data: any) => any;
 };
 
+const KIMI_CODING_MODELS_CONFIG: ProviderModelsConfigEntry = {
+  url: "https://api.kimi.com/coding/v1/models",
+  method: "GET",
+  headers: { "Content-Type": "application/json" },
+  authHeader: "x-api-key",
+  parseResponse: (data) => data.data || data.models || [],
+};
+
 // Providers that return hardcoded models (no remote /models API)
-const STATIC_MODEL_PROVIDERS = {
+const STATIC_MODEL_PROVIDERS: Record<string, () => Array<{ id: string; name: string }>> = {
   deepgram: () => [
     { id: "nova-3", name: "Nova 3 (Transcription)" },
     { id: "nova-2", name: "Nova 2 (Transcription)" },
@@ -46,6 +55,21 @@ const STATIC_MODEL_PROVIDERS = {
     { id: "nanobanana-flash", name: "NanoBanana Flash (Gemini 2.5 Flash)" },
     { id: "nanobanana-pro", name: "NanoBanana Pro (Gemini 3 Pro)" },
   ],
+  antigravity: () => [
+    { id: "claude-opus-4-6-thinking", name: "Claude Opus 4.6 Thinking" },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+    { id: "gpt-oss-120b-medium", name: "GPT OSS 120B Medium" },
+  ],
+  claude: () => [
+    { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
+    { id: "claude-opus-4-5-20251101", name: "Claude Opus 4.5 (2025-11-01)" },
+    { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5 (2025-09-29)" },
+    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5 (2025-10-01)" },
+  ],
   perplexity: () => [
     { id: "sonar", name: "Sonar (Fast Search)" },
     { id: "sonar-pro", name: "Sonar Pro (Advanced Search)" },
@@ -53,7 +77,30 @@ const STATIC_MODEL_PROVIDERS = {
     { id: "sonar-reasoning-pro", name: "Sonar Reasoning Pro (Advanced CoT + Search)" },
     { id: "sonar-deep-research", name: "Sonar Deep Research (Expert Analysis)" },
   ],
+  "bailian-coding-plan": () => [
+    { id: "qwen3.5-plus", name: "Qwen3.5 Plus" },
+    { id: "qwen3-max-2026-01-23", name: "Qwen3 Max (2026-01-23)" },
+    { id: "qwen3-coder-next", name: "Qwen3 Coder Next" },
+    { id: "qwen3-coder-plus", name: "Qwen3 Coder Plus" },
+    { id: "MiniMax-M2.5", name: "MiniMax M2.5" },
+    { id: "glm-5", name: "GLM 5" },
+    { id: "glm-4.7", name: "GLM 4.7" },
+    { id: "kimi-k2.5", name: "Kimi K2.5" },
+  ],
 };
+
+/**
+ * Get static models for a provider (if available).
+ * Exported for testing purposes.
+ * @param provider - Provider ID
+ * @returns Array of models or undefined if provider doesn't use static models
+ */
+export function getStaticModelsForProvider(
+  provider: string
+): Array<{ id: string; name: string }> | undefined {
+  const staticModelsFn = STATIC_MODEL_PROVIDERS[provider];
+  return staticModelsFn ? staticModelsFn() : undefined;
+}
 
 // Provider models endpoints configuration
 const PROVIDER_MODELS_CONFIG: Record<string, ProviderModelsConfigEntry> = {
@@ -134,11 +181,10 @@ const PROVIDER_MODELS_CONFIG: Record<string, ProviderModelsConfigEntry> = {
     parseResponse: (data) => data.data || [],
   },
   "kimi-coding": {
-    url: "https://api.kimi.com/coding/v1/models",
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    authHeader: "x-api-key",
-    parseResponse: (data) => data.data || data.models || [],
+    ...KIMI_CODING_MODELS_CONFIG,
+  },
+  "kimi-coding-apikey": {
+    ...KIMI_CODING_MODELS_CONFIG,
   },
   anthropic: {
     url: "https://api.anthropic.com/v1/models",
@@ -306,39 +352,93 @@ export async function GET(request, { params }) {
         );
       }
 
-      let modelsUrl = baseUrl.replace(/\/$/, "");
-      if (modelsUrl.endsWith("/chat/completions")) {
-        modelsUrl = modelsUrl.slice(0, -17) + "/models";
-      } else if (modelsUrl.endsWith("/completions")) {
-        modelsUrl = modelsUrl.slice(0, -12) + "/models";
-      } else {
-        modelsUrl = `${modelsUrl}/models`;
+      let base = baseUrl.replace(/\/$/, "");
+      if (base.endsWith("/chat/completions")) {
+        base = base.slice(0, -17);
+      } else if (base.endsWith("/completions")) {
+        base = base.slice(0, -12);
+      } else if (base.endsWith("/v1")) {
+        base = base.slice(0, -3);
       }
 
-      const response = await fetch(modelsUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
+      // T39: Try multiple endpoint formats
+      const endpoints = [
+        `${base}/v1/models`,
+        `${base}/models`,
+        `${baseUrl.replace(/\/$/, "")}/models`, // Original fallback
+      ];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log(`Error fetching models from ${provider}:`, errorText);
-        return NextResponse.json(
-          { error: `Failed to fetch models: ${response.status}` },
-          { status: response.status }
-        );
+      // Remove duplicates
+      const uniqueEndpoints = [...new Set(endpoints)];
+      let models = null;
+      let lastErrorStatus = null;
+
+      for (const modelsUrl of uniqueEndpoints) {
+        try {
+          const response = await fetch(modelsUrl, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            signal: AbortSignal.timeout(5000), // Quick timeout for fallbacks
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            models = data.data || data.models || [];
+            break; // Success!
+          }
+
+          if (response.status === 401 || response.status === 403) {
+            lastErrorStatus = response.status;
+            throw new Error("auth_failed");
+          }
+        } catch (err: any) {
+          if (err.message === "auth_failed") break; // Don't try other endpoints if auth failed
+        }
       }
 
-      const data = await response.json();
-      const models = data.data || data.models || [];
+      // If all endpoints failed (but not because of auth), fallback to local catalog
+      if (!models) {
+        if (lastErrorStatus === 401 || lastErrorStatus === 403) {
+          return NextResponse.json(
+            { error: `Auth failed: ${lastErrorStatus}` },
+            { status: lastErrorStatus }
+          );
+        }
+
+        console.warn(`[models] All endpoints failed for ${provider}, using local catalog`);
+        const localModels = PROVIDER_MODELS[provider] || [];
+        models = localModels.map((m: any) => ({
+          id: m.id,
+          name: m.name || m.id,
+          owned_by: provider,
+        }));
+      }
+
+      // Track source for MCP tool T39 requirement
+      const source =
+        models === null || (models && models.length > 0 && models[0].owned_by === provider)
+          ? "local_catalog"
+          : "api";
 
       return NextResponse.json({
         provider,
         connectionId,
         models,
+        source,
+        ...(source === "local_catalog"
+          ? { warning: "API unavailable — using cached catalog" }
+          : {}),
+      });
+    }
+
+    if (provider === "claude") {
+      return NextResponse.json({
+        provider,
+        connectionId,
+        models: STATIC_MODEL_PROVIDERS.claude(),
       });
     }
 
@@ -357,13 +457,14 @@ export async function GET(request, { params }) {
       }
 
       const url = `${baseUrl}/models`;
+      const token = accessToken || apiKey;
       const response = await fetch(url, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
+          ...(apiKey ? { "x-api-key": apiKey } : {}),
           "anthropic-version": "2023-06-01",
-          Authorization: `Bearer ${apiKey}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
 

@@ -11,18 +11,6 @@ _พร็อกซี API สากลของคุณ — จุดสิ้
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 ผู้ให้บริการ AI ฟรีสำหรับตัวแทนการเขียนโค้ดที่คุณชื่นชอบ
 
 _เชื่อมต่อเครื่องมือ IDE หรือ CLI ที่ขับเคลื่อนด้วย AI ผ่าน OmniRoute — เกตเวย์ API ฟรีสำหรับการเข้ารหัสไม่จำกัด_
@@ -105,6 +93,34 @@ _เชื่อมต่อเครื่องมือ IDE หรือ CLI 
   </table>
 
 <sub>📡 ตัวแทนทั้งหมดเชื่อมต่อผ่าน <code>http://localhost:20128/v1</code> หรือ <code>http://cloud.omniroute.online/v1</code> — การกำหนดค่าเดียว โมเดลไม่จำกัด และ โควต้า</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -864,14 +880,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 Multi-Modal API
 
-| คุณสมบัติ               | มันทำอะไร                                                     |
-| ----------------------- | ------------------------------------------------------------- |
-| 🖼️ **การสร้างภาพ**      | `/v1/images/generations` — ผู้ให้บริการ 4 ราย รุ่น 9+         |
-| 📐 **การฝัง**           | `/v1/embeddings` — ผู้ให้บริการ 6 ราย รุ่น 9+                 |
-| 🎶 **การถอดเสียง**      | `/v1/audio/transcriptions` — รองรับการกระซิบ                  |
-| 🔊 **ข้อความเป็นคำพูด** | `/v1/audio/speech` — การสังเคราะห์เสียงจากผู้ให้บริการหลายราย |
-| 🛡️ **การกลั่นกรอง**     | `/v1/moderations` — การตรวจสอบความปลอดภัยของเนื้อหา           |
-| 🔀 **จัดอันดับ**        | `/v1/rerank` — การจัดอันดับความเกี่ยวข้องของเอกสาร            |
+| คุณสมบัติ               | มันทำอะไร                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **การสร้างภาพ**      | `/v1/images/generations` — ผู้ให้บริการ 4 ราย รุ่น 9+                                                                                 |
+| 📐 **การฝัง**           | `/v1/embeddings` — ผู้ให้บริการ 6 ราย รุ่น 9+                                                                                         |
+| 🎶 **การถอดเสียง**      | `/v1/audio/transcriptions` — รองรับการกระซิบ                                                                                          |
+| 🔊 **ข้อความเป็นคำพูด** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise) |
+| 🛡️ **การกลั่นกรอง**     | `/v1/moderations` — การตรวจสอบความปลอดภัยของเนื้อหา                                                                                   |
+| 🔀 **จัดอันดับ**        | `/v1/rerank` — การจัดอันดับความเกี่ยวข้องของเอกสาร                                                                                    |
 
 ### 🛡️ ความยืดหยุ่นและความปลอดภัย
 

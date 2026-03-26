@@ -11,18 +11,6 @@ _Tu proxy de API universal — un endpoint, 36+ proveedores, cero tiempo de inac
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Proveedor de IA Gratuito para tus agentes de programación favoritos
 
 _Conecta cualquier IDE o herramienta CLI con IA a través de OmniRoute — gateway de API gratuito para programación ilimitada._
@@ -105,6 +93,34 @@ _Conecta cualquier IDE o herramienta CLI con IA a través de OmniRoute — gatew
   </table>
 
 <sub>📡 Todos los agentes se conectan vía <code>http://localhost:20128/v1</code> o <code>http://cloud.omniroute.online/v1</code> — una configuración, modelos y cuota ilimitados</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -867,14 +883,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 APIs Multi-Modal
 
-| Característica                | Qué Hace                                               |
-| ----------------------------- | ------------------------------------------------------ |
-| 🖼️ **Generación de Imágenes** | `/v1/images/generations` — 4 proveedores, 9+ modelos   |
-| 📐 **Embeddings**             | `/v1/embeddings` — 6 proveedores, 9+ modelos           |
-| 🎤 **Transcripción de Audio** | `/v1/audio/transcriptions` — Compatible con Whisper    |
-| 🔊 **Texto a Voz**            | `/v1/audio/speech` — Síntesis de audio multi-proveedor |
-| 🛡️ **Moderaciones**           | `/v1/moderations` — Verificaciones de seguridad        |
-| 🔀 **Reranking**              | `/v1/rerank` — Reranking de relevancia de documentos   |
+| Característica                | Qué Hace                                                                                                                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Generación de Imágenes** | `/v1/images/generations` — 4 proveedores, 9+ modelos                                                                                                                       |
+| 📐 **Embeddings**             | `/v1/embeddings` — 6 proveedores, 9+ modelos                                                                                                                               |
+| 🎤 **Transcripción de Audio** | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Texto a Voz**            | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Moderaciones**           | `/v1/moderations` — Verificaciones de seguridad                                                                                                                            |
+| 🔀 **Reranking**              | `/v1/rerank` — Reranking de relevancia de documentos                                                                                                                       |
 
 ### 🛡️ Resiliencia y Seguridad
 

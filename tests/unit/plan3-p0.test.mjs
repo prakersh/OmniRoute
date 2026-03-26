@@ -3,17 +3,18 @@ import assert from "node:assert/strict";
 
 import { FORMATS } from "../../open-sse/translator/formats.ts";
 import { getModelInfoCore } from "../../open-sse/services/model.ts";
-import { detectFormat } from "../../open-sse/services/provider.ts";
+import { detectFormat, detectFormatFromEndpoint } from "../../open-sse/services/provider.ts";
 import { shouldUseNativeCodexPassthrough } from "../../open-sse/handlers/chatCore.ts";
 import { translateRequest } from "../../open-sse/translator/index.ts";
 import { GithubExecutor } from "../../open-sse/executors/github.ts";
-import {
-  CodexExecutor,
-  setDefaultFastServiceTierEnabled,
-} from "../../open-sse/executors/codex.ts";
+import { DefaultExecutor } from "../../open-sse/executors/default.ts";
+import { CodexExecutor, setDefaultFastServiceTierEnabled } from "../../open-sse/executors/codex.ts";
 import { translateNonStreamingResponse } from "../../open-sse/handlers/responseTranslator.ts";
 import { extractUsageFromResponse } from "../../open-sse/handlers/usageExtractor.ts";
-import { parseSSEToResponsesOutput } from "../../open-sse/handlers/sseParser.ts";
+import {
+  parseSSEToOpenAIResponse,
+  parseSSEToResponsesOutput,
+} from "../../open-sse/handlers/sseParser.ts";
 
 test("getModelInfoCore resolves unique non-openai unprefixed model", async () => {
   const info = await getModelInfoCore("claude-haiku-4-5-20251001", {});
@@ -60,6 +61,14 @@ test("GithubExecutor keeps non-codex model on /chat/completions", () => {
   assert.match(url, /\/chat\/completions$/);
 });
 
+test("DefaultExecutor uses x-api-key for kimi-coding-apikey", () => {
+  const executor = new DefaultExecutor("kimi-coding-apikey");
+  const headers = executor.buildHeaders({ apiKey: "sk-kimi-test" }, true);
+
+  assert.equal(headers["x-api-key"], "sk-kimi-test");
+  assert.equal(headers.Authorization, undefined);
+});
+
 test("CodexExecutor forces stream=true for upstream compatibility", () => {
   const executor = new CodexExecutor();
   const transformed = executor.transformRequest(
@@ -68,6 +77,45 @@ test("CodexExecutor forces stream=true for upstream compatibility", () => {
     false
   );
   assert.equal(transformed.stream, true);
+});
+
+test("Claude native messages can be round-tripped through OpenAI into Claude OAuth format", () => {
+  const normalizeOptions = { normalizeToolCallId: false, preserveDeveloperRole: undefined };
+  const openaiBody = translateRequest(
+    FORMATS.CLAUDE,
+    FORMATS.OPENAI,
+    "claude-sonnet-4-6",
+    {
+      model: "claude-sonnet-4-6",
+      max_tokens: 32,
+      messages: [{ role: "user", content: "reply with OK only" }],
+    },
+    false,
+    null,
+    "claude",
+    null,
+    normalizeOptions
+  );
+  const translated = translateRequest(
+    FORMATS.OPENAI,
+    FORMATS.CLAUDE,
+    "claude-sonnet-4-6",
+    openaiBody,
+    false,
+    null,
+    "claude",
+    null,
+    normalizeOptions
+  );
+
+  assert.deepEqual(translated.messages, [
+    {
+      role: "user",
+      content: [{ type: "text", text: "reply with OK only" }],
+    },
+  ]);
+  assert.ok(Array.isArray(translated.system));
+  assert.equal(translated.system[0]?.text?.includes("You are Claude Code"), true);
 });
 
 test("CodexExecutor maps fast service tier to priority", () => {
@@ -112,6 +160,24 @@ test("shouldUseNativeCodexPassthrough only enables responses-native Codex reques
     shouldUseNativeCodexPassthrough({
       provider: "codex",
       sourceFormat: FORMATS.OPENAI_RESPONSES,
+      endpointPath: "/v1/responses/compact",
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldUseNativeCodexPassthrough({
+      provider: "codex",
+      sourceFormat: FORMATS.OPENAI_RESPONSES,
+      endpointPath: "/v1/responses/items/history",
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldUseNativeCodexPassthrough({
+      provider: "codex",
+      sourceFormat: FORMATS.OPENAI_RESPONSES,
       endpointPath: "/v1/chat/completions",
     }),
     false
@@ -140,6 +206,18 @@ test("CodexExecutor always requests SSE accept header", () => {
   assert.equal(headers.Accept, "text/event-stream");
 });
 
+test("CodexExecutor does not request SSE accept header for compact requests", () => {
+  const executor = new CodexExecutor();
+  const headers = executor.buildHeaders(
+    {
+      accessToken: "test-token",
+      requestEndpointPath: "/v1/responses/compact",
+    },
+    false
+  );
+  assert.equal(headers.Accept, undefined);
+});
+
 test("CodexExecutor preserves native responses payloads for Codex passthrough", () => {
   const executor = new CodexExecutor();
   const transformed = executor.transformRequest(
@@ -165,6 +243,41 @@ test("CodexExecutor preserves native responses payloads for Codex passthrough", 
   assert.deepEqual(transformed.metadata, { source: "codex-client" });
   assert.equal(transformed.reasoning_effort, "high");
   assert.ok(!("_nativeCodexPassthrough" in transformed));
+});
+
+test("CodexExecutor strips streaming fields for compact passthrough", () => {
+  const executor = new CodexExecutor();
+  const transformed = executor.transformRequest(
+    "gpt-5.1-codex",
+    {
+      model: "gpt-5.1-codex",
+      input: "compact this session",
+      stream: false,
+      stream_options: { include_usage: true },
+      _nativeCodexPassthrough: true,
+    },
+    false,
+    {
+      requestEndpointPath: "/v1/responses/compact",
+    }
+  );
+
+  assert.equal("stream" in transformed, false);
+  assert.equal("stream_options" in transformed, false);
+  assert.ok(!("_nativeCodexPassthrough" in transformed));
+});
+
+test("CodexExecutor routes responses subpaths to matching upstream paths", () => {
+  const executor = new CodexExecutor();
+  const compactUrl = executor.buildUrl("gpt-5.1-codex", true, 0, {
+    requestEndpointPath: "/v1/responses/compact",
+  });
+  assert.match(compactUrl, /\/responses\/compact$/);
+
+  const genericSubpathUrl = executor.buildUrl("gpt-5.1-codex", true, 0, {
+    requestEndpointPath: "/v1/responses/items/history",
+  });
+  assert.match(genericSubpathUrl, /\/responses\/items\/history$/);
 });
 
 test("translateNonStreamingResponse converts Responses API payload to OpenAI chat.completion", () => {
@@ -246,6 +359,32 @@ test("detectFormat identifies OpenAI Responses by max_output_tokens without inpu
   assert.equal(format, FORMATS.OPENAI_RESPONSES);
 });
 
+test("detectFormatFromEndpoint forces OpenAI for /v1/chat/completions", () => {
+  const format = detectFormatFromEndpoint(
+    {
+      model: "cc/claude-opus-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 16,
+      stream: false,
+    },
+    "/v1/chat/completions"
+  );
+  assert.equal(format, FORMATS.OPENAI);
+});
+
+test("detectFormatFromEndpoint forces Claude for /v1/messages", () => {
+  const format = detectFormatFromEndpoint(
+    {
+      model: "claude-opus-4-6",
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 16,
+      stream: false,
+    },
+    "/v1/messages"
+  );
+  assert.equal(format, FORMATS.CLAUDE);
+});
+
 test("translateRequest normalizes openai-responses input string into list payload", () => {
   const translated = translateRequest(
     FORMATS.OPENAI_RESPONSES,
@@ -310,4 +449,57 @@ test("parseSSEToResponsesOutput parses completed response from SSE payload", () 
 test("parseSSEToResponsesOutput returns null for invalid payload", () => {
   const parsed = parseSSEToResponsesOutput("data: not-json\n\ndata: [DONE]\n", "fallback-model");
   assert.equal(parsed, null);
+});
+
+test("parseSSEToOpenAIResponse merges split tool call chunks by id without duplication", () => {
+  const rawSSE = [
+    `data: ${JSON.stringify({
+      id: "chatcmpl_1",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                id: "call_abc",
+                index: 0,
+                type: "function",
+                function: { name: "sum", arguments: '{"a":' },
+              },
+            ],
+          },
+        },
+      ],
+    })}`,
+    `data: ${JSON.stringify({
+      id: "chatcmpl_1",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                id: "call_abc",
+                index: 0,
+                type: "function",
+                function: { arguments: "1}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    })}`,
+    "data: [DONE]",
+  ].join("\n");
+
+  const parsed = parseSSEToOpenAIResponse(rawSSE, "gpt-5.1-codex");
+  assert.ok(parsed);
+  assert.equal(parsed.choices[0].finish_reason, "tool_calls");
+  assert.equal(parsed.choices[0].message.tool_calls.length, 1);
+  assert.equal(parsed.choices[0].message.tool_calls[0].id, "call_abc");
+  assert.equal(parsed.choices[0].message.tool_calls[0].function.name, "sum");
+  assert.equal(parsed.choices[0].message.tool_calls[0].function.arguments, '{"a":1}');
 });

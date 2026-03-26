@@ -8,63 +8,6 @@ _وكيل API العالمي الخاص بك - نقطة نهاية واحدة، 
 
 ---
 
-<div align="center">
-
-[![إصدار npm](https://img.shields.io/npm/v/omniroute?color=cb3837&logo=npm)](https://www.npmjs.com/package/omniroute)
-[![Docker Hub](https://img.shields.io/docker/v/diegosouzapw/omniroute?label=Docker%20Hub&logo=docker&color=2496ED)](https://hub.docker.com/r/diegosouzapw/omniroute)
-[![الترخيص](https://img.shields.io/github/license/diegosouzapw/OmniRoute)](https://github.com/diegosouzapw/OmniRoute/blob/main/LICENSE)
-[![موقع الويب](https://img.shields.io/badge/Website-omniroute.online-blue?logo=google-chrome&logoColor=white)](https://omniroute.online)
-[![WhatsApp](https://img.shields.io/badge/WhatsApp-Community-25D366?logo=whatsapp&logoColor=white)](https://chat.whatsapp.com/JI7cDQ1GyaiDHhVBpLxf8b?mode=gi_t)
-
-[🌐 الموقع الإلكتروني](https://omniroute.online) • [🚀 البداية السريعة](#-quick-start) • [💡 الميزات](#-key-features) • [📖 المستندات](#-documentation) • [💰 التسعير](#-pricing-at-a-glance) • [💬 واتساب](https://chat.whatsapp.com/JI7cDQ1GyaiDHhVBpLxf8b?mode=gi_t)
-
-</div>
-
-🌐 **متوفر باللغة:** 🇺🇸 [الإنجليزية](../../README.md) | 🇧🇷 [البرتغالية (البرازيل)](../pt-BR/README.md) | 🇪🇸 [الإسبانية](../es/README.md) | 🇫🇷 [Français](../fr/README.md) | 🇮🇹 [الإيطالية](../it/README.md) | 🇷🇺 [Русский](../ru/README.md) | 🇨🇳 [中文 (简体)](../zh-CN/README.md) | 🇩🇪 [الألمانية](../de/README.md) | 🇮🇳 [هندي](../in/README.md) | 🇹🇭 [ไทย](../th/README.md) | 🇺🇦 [أوكرانيا](../uk-UA/README.md) | 🇸🇦 [العربية](../ar/README.md) | 🇯🇵 [日本語](../ja/README.md) | 🇻🇳 [تيانج فيت](../vi/README.md) | 🇧🇬 [بلغارسكي](../bg/README.md) | 🇩🇰 [الدانسك](../da/README.md) | 🇫🇮 [سومي](../fi/README.md) | 🇮🇱 [العربية](../he/README.md) | 🇭🇺 [المجرية](../hu/README.md) | 🇮🇩 [البهاسا الإندونيسية](../id/README.md) | 🇰🇷 [한국어](../ko/README.md) | 🇲🇾 [البهاسا ملايو](../ms/README.md) | 🇳🇱 [هولندا](../nl/README.md) | 🇳🇴 [نورسك](../no/README.md) | 🇵🇹 [البرتغالية (البرتغال)](../pt/README.md) | 🇷🇴 [روماني](../ro/README.md) | 🇵🇱 [بولسكي](../pl/README.md) | 🇸🇰 [سلوفينسينا](../sk/README.md) | 🇸🇪 [سفينسكا](../sv/README.md) | 🇵🇭 [فلبينية](../phi/README.md)
-
----
-
-## 🖼️ لوحة التحكم الرئيسية
-
-<div align="center">
-  <img src="./docs/screenshots/MainOmniRoute.png" alt="OmniRoute Dashboard" width="800"/>
-</div>
-
----
-
-## 📸 معاينة لوحة التحكم
-
-<details>
-<summary><b>انقر لرؤية لقطات شاشة لوحة القيادة</b></summary>
-
-| صفحة                  | لقطة شاشة                                          |
-| --------------------- | -------------------------------------------------- |
-| ** مقدمو الخدمة **    | ![مقدمو الخدمة](docs/screenshots/01-providers.png) |
-| **المجموعات**         | ![المجموعات](docs/screenshots/02-combos.png)       |
-| **تحليلات**           | ![تحليلات](docs/screenshots/03-analytics.png)      |
-| **الصحة**             | ![الصحة](docs/screenshots/04-health.png)           |
-| **مترجم**             | ![مترجم](docs/screenshots/05-translator.png)       |
-| **الإعدادات**         | ![الإعدادات](docs/screenshots/06-settings.png)     |
-| **أدوات سطر الأوامر** | ![أدوات CLI](docs/screenshots/07-cli-tools.png)    |
-| **سجلات الاستخدام**   | ![الاستخدام](docs/screenshots/08-usage.png)        |
-| **نقطة النهاية**      | ![نقطة النهاية](docs/screenshots/09-endpoint.png)  |
-
-</details>
-
----
-
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 موفر الذكاء الاصطناعي المجاني لوكلاء البرمجة المفضلين لديك
 
 _قم بتوصيل أي أداة IDE أو CLI مدعومة بالذكاء الاصطناعي من خلال OmniRoute - بوابة واجهة برمجة التطبيقات المجانية للترميز غير المحدود._
@@ -146,6 +89,34 @@ _قم بتوصيل أي أداة IDE أو CLI مدعومة بالذكاء الا
   </table>
 
 <sub>📡 يتصل جميع الوكلاء عبر <code>http://localhost:20128/v1</code> أو <code>http://cloud.omniroute.online/v1</code> - تكوين واحد ونماذج غير محدودة و حصة</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -922,8 +893,8 @@ npm run electron:build:linux   # Linux (.AppImage)
 | ميزة | ماذا يفعل || -------------------------- | ------------------------------------------------------------- |
 | 🖼️ **إنشاء الصور** | `/v1/images/generations` مع الواجهات الخلفية السحابية والمحلية |
 | 📐 **المضامين** | `/v1/embeddings` للبحث وخطوط أنابيب RAG |
-| 🎤 **نسخ صوتي** | `/v1/audio/transcriptions` (مقدمو خدمات الهمس والإضافيون) |
-| 🔊 **تحويل النص إلى كلام** | `/v1/audio/speech` (محركات/موفرو متعددون) |
+| 🎤 **نسخ صوتي** | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **تحويل النص إلى كلام** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise) |
 | 🎬 **توليد الفيديو** | `/v1/videos/generations` (سير عمل ComfyUI + SD WebUI) |
 | 🎵 **جيل الموسيقى** | `/v1/music/generations` (سير عمل ComfyUI) |
 | 🛡️ **اعتدالات** | فحوصات السلامة `/v1/moderations` |

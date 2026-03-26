@@ -11,18 +11,6 @@ _Seu proxy de API universal — um endpoint, 36+ provedores, zero tempo de inati
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Provedor de IA Gratuito para seus agentes de programação favoritos
 
 _Conecte qualquer IDE ou ferramenta CLI com IA através do OmniRoute — gateway de API gratuito para programação ilimitada._
@@ -105,6 +93,34 @@ _Conecte qualquer IDE ou ferramenta CLI com IA através do OmniRoute — gateway
   </table>
 
 <sub>📡 Todos os agentes se conectam via <code>http://localhost:20128/v1</code> ou <code>http://cloud.omniroute.online/v1</code> — uma configuração, modelos e cota ilimitados</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -809,24 +825,28 @@ Quando minimizado, o OmniRoute fica na bandeja do sistema com ações rápidas:
 
 ## 💰 Preços Resumidos
 
-| Tier              | Provedor          | Custo                        | Reset de Cota     | Melhor Para             |
-| ----------------- | ----------------- | ---------------------------- | ----------------- | ----------------------- |
-| **💳 ASSINATURA** | Claude Code (Pro) | $20/mês                      | 5h + semanal      | Já é assinante          |
-|                   | Codex (Plus/Pro)  | $20-200/mês                  | 5h + semanal      | Usuários OpenAI         |
-|                   | Gemini CLI        | **GRATUITO**                 | 180K/mês + 1K/dia | Todos!                  |
-|                   | GitHub Copilot    | $10-19/mês                   | Mensal            | Usuários GitHub         |
-| **🔑 API KEY**    | NVIDIA NIM        | **GRATUITO** (1000 créditos) | Único             | Testes gratuitos        |
-|                   | DeepSeek          | Por uso                      | Nenhum            | Melhor preço/qualidade  |
-|                   | Groq              | Tier gratuito + pago         | Limitado          | Inferência ultra-rápida |
-|                   | xAI (Grok)        | Por uso                      | Nenhum            | Modelos Grok            |
-|                   | Mistral           | Tier gratuito + pago         | Limitado          | IA Europeia             |
-|                   | OpenRouter        | Por uso                      | Nenhum            | 100+ modelos            |
-| **💰 BARATO**     | GLM-4.7           | $0.6/1M                      | Diário 10h        | Backup econômico        |
-|                   | MiniMax M2.1      | $0.2/1M                      | Rotativo 5h       | Opção mais barata       |
-|                   | Kimi K2           | $9/mês fixo                  | 10M tokens/mês    | Custo previsível        |
-| **🆓 GRATUITO**   | iFlow             | $0                           | Ilimitado         | 8 modelos gratuitos     |
-|                   | Qwen              | $0                           | Ilimitado         | 3 modelos gratuitos     |
-|                   | Kiro              | $0                           | Ilimitado         | Claude gratuito         |
+| Tier              | Provedor          | Custo                        | Reset de Cota     | Melhor Para                    |
+| ----------------- | ----------------- | ---------------------------- | ----------------- | ------------------------------ |
+| **💳 ASSINATURA** | Claude Code (Pro) | $20/mês                      | 5h + semanal      | Já é assinante                 |
+|                   | Codex (Plus/Pro)  | $20-200/mês                  | 5h + semanal      | Usuários OpenAI                |
+|                   | Gemini CLI        | **GRATUITO**                 | 180K/mês + 1K/dia | Todos!                         |
+|                   | GitHub Copilot    | $10-19/mês                   | Mensal            | Usuários GitHub                |
+| **🔑 API KEY**    | NVIDIA NIM        | **GRATUITO** (1000 créditos) | Único             | Testes gratuitos               |
+|                   | DeepSeek          | Por uso                      | Nenhum            | Melhor preço/qualidade         |
+|                   | Groq              | Tier gratuito + pago         | Limitado          | Inferência ultra-rápida        |
+|                   | xAI (Grok)        | Por uso                      | Nenhum            | Modelos Grok                   |
+|                   | Mistral           | Tier gratuito + pago         | Limitado          | IA Europeia                    |
+|                   | OpenRouter        | Por uso                      | Nenhum            | 100+ modelos                   |
+| **💰 BARATO**     | GLM-4.7           | $0.6/1M                      | Diário 10h        | Backup econômico               |
+|                   | MiniMax M2.1      | $0.2/1M                      | Rotativo 5h       | Opção mais barata              |
+|                   | Kimi K2           | $9/mês fixo                  | 10M tokens/mês    | Custo previsível               |
+| **🆓 GRATUITO**   | iFlow             | $0                           | Ilimitado         | 8 modelos gratuitos            |
+|                   | Qwen              | $0                           | Ilimitado         | 3 modelos gratuitos            |
+|                   | Kiro              | $0                           | Ilimitado         | Claude gratuito                |
+|                   | LongCat 🆕        | **$0** (50M tok/dia 🔥)      | 1 req/s           | Maior cota grátis do mundo     |
+|                   | Pollinations 🆕   | **$0** (sem chave API)       | 1 req/15s         | GPT-5, Claude, DeepSeek, Llama |
+|                   | Cloudflare AI 🆕  | **$0** (10K Neurons/dia)     | ~150 resp/dia     | 50+ modelos, edge global       |
+|                   | Scaleway AI 🆕    | **$0** (1M tokens total)     | Limitado por taxa | EU/GDPR, Qwen3 235B, Llama 70B |
 
 **💡 Dica Pro:** Comece com Gemini CLI (180K grátis/mês) + iFlow (ilimitado grátis) = $0 de custo!
 
@@ -869,16 +889,16 @@ Por que isso é relevante:
 
 ### 🎵 APIs Multi-Modal
 
-| Funcionalidade              | O que Faz                                                                                                   |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 🖼️ **Geração de Imagem**    | `/v1/images/generations` — 10 provedores, 20+ modelos (cloud + local)                                       |
-| 📐 **Embeddings**           | `/v1/embeddings` — 6 provedores, 9+ modelos                                                                 |
-| 🎤 **Transcrição de Áudio** | `/v1/audio/transcriptions` — Whisper + Nvidia NIM, HuggingFace, Qwen3                                       |
-| 🔊 **Texto para Fala**      | `/v1/audio/speech` — ElevenLabs, Nvidia NIM, HuggingFace, Coqui, Tortoise, Qwen3, Inworld, Cartesia, PlayHT |
-| 🎬 **Geração de Vídeo**     | `/v1/videos/generations` — ComfyUI (AnimateDiff, SVD), SD WebUI                                             |
-| 🎵 **Geração de Música**    | `/v1/music/generations` — ComfyUI (Stable Audio Open, MusicGen)                                             |
-| 🛡️ **Moderações**           | `/v1/moderations` — Verificações de segurança                                                               |
-| 🔀 **Reranking**            | `/v1/rerank` — Reranking de relevância de documentos                                                        |
+| Funcionalidade              | O que Faz                                                                                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Geração de Imagem**    | `/v1/images/generations` — 10 provedores, 20+ modelos (cloud + local)                                                                                                      |
+| 📐 **Embeddings**           | `/v1/embeddings` — 6 provedores, 9+ modelos                                                                                                                                |
+| 🎤 **Transcrição de Áudio** | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Texto para Fala**      | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🎬 **Geração de Vídeo**     | `/v1/videos/generations` — ComfyUI (AnimateDiff, SVD), SD WebUI                                                                                                            |
+| 🎵 **Geração de Música**    | `/v1/music/generations` — ComfyUI (Stable Audio Open, MusicGen)                                                                                                            |
+| 🛡️ **Moderações**           | `/v1/moderations` — Verificações de segurança                                                                                                                              |
+| 🔀 **Reranking**            | `/v1/rerank` — Reranking de relevância de documentos                                                                                                                       |
 
 ### 🛡️ Resiliência e Segurança
 
@@ -1212,6 +1232,53 @@ Modelos:
   kr/claude-sonnet-4.5
   kr/claude-haiku-4.5
 ```
+
+### LongCat AI (GRATUITO 50M tokens/dia!) 🆕
+
+1. Cadastre-se: [longcat.chat](https://longcat.chat) com e-mail ou telefone
+2. Gere uma chave de API gratuita
+3. Dashboard → Adicionar Provedor → LongCat
+
+**Modelos:**
+
+- `lc/LongCat-Flash-Lite` — **50M tokens/dia** 💥 (maior cota gratuita do mundo!)
+- `lc/LongCat-Flash-Chat` — 500K tokens/dia
+- `lc/LongCat-Flash-Thinking` — 500K tokens/dia (raciocínio)
+
+> 100% gratuito durante o beta público. Reset diário à meia-noite UTC.
+
+### Pollinations AI (SEM CHAVE NECESSÁRIA!) 🆕
+
+1. Adicione o provedor Pollinations no Dashboard
+2. Deixe o campo de chave API vazio (ou coloque qualquer string)
+3. Comece a usar imediatamente!
+
+**Modelos via `pol/`:** `openai` (GPT-5), `claude`, `gemini`, `deepseek`, `llama` (Llama 4)
+
+> Sem cadastro, sem chave, sem cartão de crédito. 1 req/15s ilimitado.
+
+### Cloudflare Workers AI (GRATUITO 10K Neurons/dia!) 🆕
+
+1. Cadastre-se: [dash.cloudflare.com](https://dash.cloudflare.com)
+2. Gere um API Token em Profile → API Tokens
+3. Copie seu Account ID (coluna direita do dashboard)
+4. Dashboard → Adicionar Provedor → Cloudflare AI
+   - API Key: seu token
+   - Account ID: seu account ID
+
+**Modelos via `cf/`:** `@cf/meta/llama-3.3-70b-instruct`, `@cf/google/gemma-3-12b-it`, 50+ mais
+
+> 10K Neurons/dia ≈ 150 respostas de LLM ou 500s de transcrição Whisper gratuita!
+
+### Scaleway AI (1M tokens gratuitos!) 🆕
+
+1. Cadastre-se: [console.scaleway.com](https://console.scaleway.com)
+2. Gere uma chave de API IAM
+3. Dashboard → Adicionar Provedor → Scaleway
+
+**Modelos via `scw/`:** `qwen3-235b-a22b-instruct-2507` (Qwen3 235B!), `llama-3.1-70b-instruct`
+
+> 1M tokens gratuitos para novas contas. Dados processados na 🇫🇷 França (EU/GDPR).
 
 </details>
 

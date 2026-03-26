@@ -30,6 +30,8 @@ type StreamLogger = {
 type StreamCompletePayload = {
   status: number;
   usage: unknown;
+  /** Minimal response body for call log (streaming: usage + note; non-streaming not used) */
+  responseBody?: unknown;
 };
 
 type StreamOptions = {
@@ -51,7 +53,18 @@ type TranslateState = ReturnType<typeof initState> & {
   toolNameMap?: unknown;
   usage?: unknown;
   finishReason?: unknown;
+  /** Accumulated message content for call log response body */
+  accumulatedContent?: string;
 };
+
+type ToolCall = {
+  id: string | null;
+  index: number;
+  type: string;
+  function: { name: string; arguments: string };
+};
+
+type UsageTokenRecord = Record<string, number>;
 
 function getOpenAIIntermediateChunks(value: unknown): unknown[] {
   if (!value || typeof value !== "object") return [];
@@ -104,16 +117,28 @@ export function createSSEStream(options: StreamOptions = {}) {
   } = options;
 
   let buffer = "";
-  let usage = null;
+  let usage: UsageTokenRecord | null = null;
+  /** Passthrough (OpenAI CC shape): saw tool_calls in stream before finish_reason */
+  let passthroughHasToolCalls = false;
+  /** Passthrough: accumulate tool_calls deltas for call log responseBody */
+  const passthroughToolCalls = new Map<string, ToolCall>();
+  let passthroughToolCallSeq = 0;
 
-  // State for translate mode
+  // State for translate mode (accumulatedContent for call log response body)
   const state: TranslateState | null =
     mode === STREAM_MODE.TRANSLATE
-      ? { ...(initState(sourceFormat) as TranslateState), provider, toolNameMap }
+      ? {
+          ...(initState(sourceFormat) as TranslateState),
+          provider,
+          toolNameMap,
+          accumulatedContent: "",
+        }
       : null;
 
   // Track content length for usage estimation (both modes)
   let totalContentLength = 0;
+  // Passthrough: accumulate content for call log response body
+  let passthroughAccumulatedContent = "";
 
   // Guard against duplicate [DONE] events — ensures exactly one per stream
   let doneSent = false;
@@ -201,29 +226,37 @@ export function createSSEStream(options: StreamOptions = {}) {
                   if (extracted) {
                     usage = extracted;
                   }
-                  // Track content length from Responses format
+                  // Track content length and accumulate for call log
                   if (parsed.delta && typeof parsed.delta === "string") {
                     totalContentLength += parsed.delta.length;
+                    passthroughAccumulatedContent += parsed.delta;
                   }
                 } else if (isClaudeSSE) {
                   // Claude SSE: extract usage, track content, forward as-is
                   const extracted = extractUsage(parsed);
                   if (extracted) {
                     // Non-destructive merge: never overwrite a positive value with 0
-                    // message_start carries input_tokens, message_delta carries output_tokens
+                    // message_start carries input_tokens, message_delta carries output_tokens;
                     if (!usage) usage = {};
-                    if (extracted.prompt_tokens > 0) usage.prompt_tokens = extracted.prompt_tokens;
-                    if (extracted.completion_tokens > 0)
-                      usage.completion_tokens = extracted.completion_tokens;
-                    if (extracted.total_tokens > 0) usage.total_tokens = extracted.total_tokens;
-                    if (extracted.cache_read_input_tokens)
-                      usage.cache_read_input_tokens = extracted.cache_read_input_tokens;
-                    if (extracted.cache_creation_input_tokens)
-                      usage.cache_creation_input_tokens = extracted.cache_creation_input_tokens;
+                    const u = usage;
+                    const eu = extracted as UsageTokenRecord;
+                    if (eu.prompt_tokens > 0) u.prompt_tokens = eu.prompt_tokens;
+                    if (eu.completion_tokens > 0) u.completion_tokens = eu.completion_tokens;
+                    if (eu.total_tokens > 0) u.total_tokens = eu.total_tokens;
+                    if (eu.cache_read_input_tokens)
+                      u.cache_read_input_tokens = eu.cache_read_input_tokens;
+                    if (eu.cache_creation_input_tokens)
+                      u.cache_creation_input_tokens = eu.cache_creation_input_tokens;
                   }
-                  // Track content length from Claude format
-                  if (parsed.delta?.text) totalContentLength += parsed.delta.text.length;
-                  if (parsed.delta?.thinking) totalContentLength += parsed.delta.thinking.length;
+                  // Track content length and accumulate from Claude format
+                  if (parsed.delta?.text) {
+                    totalContentLength += parsed.delta.text.length;
+                    passthroughAccumulatedContent += parsed.delta.text;
+                  }
+                  if (parsed.delta?.thinking) {
+                    totalContentLength += parsed.delta.thinking.length;
+                    passthroughAccumulatedContent += parsed.delta.thinking;
+                  }
                 } else {
                   // Chat Completions: full sanitization pipeline
                   parsed = sanitizeStreamingChunk(parsed);
@@ -245,10 +278,49 @@ export function createSSEStream(options: StreamOptions = {}) {
                     }
                   }
 
+                  // T18: Track if we saw tool calls & accumulate for call log
+                  if (delta?.tool_calls && delta.tool_calls.length > 0) {
+                    passthroughHasToolCalls = true;
+                    for (const tc of delta.tool_calls) {
+                      // Key by index first — id only appears on the first delta in OpenAI streaming
+                      let key: string;
+                      if (Number.isInteger(tc?.index)) {
+                        key = `idx:${tc.index}`;
+                      } else if (tc?.id) {
+                        key = `id:${tc.id}`;
+                      } else {
+                        key = `seq:${++passthroughToolCallSeq}`;
+                      }
+                      const existing = passthroughToolCalls.get(key);
+                      const deltaArgs =
+                        typeof tc?.function?.arguments === "string" ? tc.function.arguments : "";
+                      if (!existing) {
+                        passthroughToolCalls.set(key, {
+                          id: tc?.id ?? null,
+                          index: Number.isInteger(tc?.index) ? tc.index : passthroughToolCalls.size,
+                          type: tc?.type || "function",
+                          function: {
+                            name: tc?.function?.name || "",
+                            arguments: deltaArgs,
+                          },
+                        });
+                      } else {
+                        if (tc?.id) existing.id = existing.id || tc.id;
+                        if (tc?.function?.name && !existing.function.name)
+                          existing.function.name = tc.function.name;
+                        existing.function.arguments += deltaArgs;
+                      }
+                    }
+                  }
+
                   const content = delta?.content || delta?.reasoning_content;
                   if (content && typeof content === "string") {
                     totalContentLength += content.length;
                   }
+                  if (typeof delta?.content === "string")
+                    passthroughAccumulatedContent += delta.content;
+                  if (typeof delta?.reasoning_content === "string")
+                    passthroughAccumulatedContent += delta.reasoning_content;
 
                   const extracted = extractUsage(parsed);
                   if (extracted) {
@@ -256,6 +328,20 @@ export function createSSEStream(options: StreamOptions = {}) {
                   }
 
                   const isFinishChunk = parsed.choices?.[0]?.finish_reason;
+
+                  // T18: Normalize finish_reason to 'tool_calls' if tool calls were used
+                  if (
+                    isFinishChunk &&
+                    passthroughHasToolCalls &&
+                    parsed.choices[0].finish_reason !== "tool_calls"
+                  ) {
+                    parsed.choices[0].finish_reason = "tool_calls";
+                    // If we modify it, we must output the modified object
+                    if (!injectedUsage && hasValidUsage(parsed.usage)) {
+                      output = `data: ${JSON.stringify(parsed)}\n`;
+                      injectedUsage = true;
+                    }
+                  }
                   if (isFinishChunk && !hasValidUsage(parsed.usage)) {
                     const estimated = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
                     parsed.usage = filterUsageForFormat(estimated, FORMATS.OPENAI);
@@ -304,23 +390,45 @@ export function createSSEStream(options: StreamOptions = {}) {
             continue;
           }
 
-          // Track content length for estimation (from various formats)
-          // Include both regular content and reasoning/thinking content
+          // Track content length and accumulate for call log (from raw provider chunk, so content is never missed)
+          // Do this before translation so we capture content regardless of translator output shape
 
           // Claude format
           if (parsed.delta?.text) {
-            totalContentLength += parsed.delta.text.length;
+            const t = parsed.delta.text;
+            totalContentLength += t.length;
+            if (state?.accumulatedContent !== undefined && typeof t === "string")
+              state.accumulatedContent += t;
           }
           if (parsed.delta?.thinking) {
-            totalContentLength += parsed.delta.thinking.length;
+            const t = parsed.delta.thinking;
+            totalContentLength += t.length;
+            if (state?.accumulatedContent !== undefined && typeof t === "string")
+              state.accumulatedContent += t;
           }
 
           // OpenAI format
           if (parsed.choices?.[0]?.delta?.content) {
-            totalContentLength += parsed.choices[0].delta.content.length;
+            const c = parsed.choices[0].delta.content;
+            if (typeof c === "string") {
+              totalContentLength += c.length;
+              if (state?.accumulatedContent !== undefined) state.accumulatedContent += c;
+            } else if (Array.isArray(c)) {
+              for (const part of c) {
+                if (part?.text && typeof part.text === "string") {
+                  totalContentLength += part.text.length;
+                  if (state?.accumulatedContent !== undefined)
+                    state.accumulatedContent += part.text;
+                }
+              }
+            }
           }
           if (parsed.choices?.[0]?.delta?.reasoning_content) {
-            totalContentLength += parsed.choices[0].delta.reasoning_content.length;
+            const r = parsed.choices[0].delta.reasoning_content;
+            if (typeof r === "string") {
+              totalContentLength += r.length;
+              if (state?.accumulatedContent !== undefined) state.accumulatedContent += r;
+            }
           }
 
           // Gemini format - may have multiple parts
@@ -328,7 +436,27 @@ export function createSSEStream(options: StreamOptions = {}) {
             for (const part of parsed.candidates[0].content.parts) {
               if (part.text && typeof part.text === "string") {
                 totalContentLength += part.text.length;
+                if (state?.accumulatedContent !== undefined) state.accumulatedContent += part.text;
               }
+            }
+          }
+
+          // Generic fallback: delta string, top-level content/text (e.g. some SSE payloads)
+          if (state?.accumulatedContent !== undefined) {
+            if (typeof (parsed as JsonRecord).delta === "string") {
+              const d = (parsed as JsonRecord).delta as string;
+              state.accumulatedContent += d;
+              totalContentLength += d.length;
+            }
+            if (typeof (parsed as JsonRecord).content === "string") {
+              const c = (parsed as JsonRecord).content as string;
+              state.accumulatedContent += c;
+              totalContentLength += c.length;
+            }
+            if (typeof (parsed as JsonRecord).text === "string") {
+              const t = (parsed as JsonRecord).text as string;
+              state.accumulatedContent += t;
+              totalContentLength += t.length;
             }
           }
 
@@ -347,6 +475,9 @@ export function createSSEStream(options: StreamOptions = {}) {
 
           if (translated?.length > 0) {
             for (const item of translated) {
+              // Content for call log is accumulated only from parsed (above) to avoid double-counting;
+              // do not add again from item here.
+
               // Filter empty chunks
               if (!hasValuableContent(item, sourceFormat)) {
                 continue; // Skip this empty chunk
@@ -418,10 +549,37 @@ export function createSSEStream(options: StreamOptions = {}) {
                 status: "200 OK",
               }).catch(() => {});
             }
-            // Notify caller for call log persistence
+            // Notify caller for call log persistence (include full response body with accumulated content)
             if (onComplete) {
               try {
-                onComplete({ status: 200, usage });
+                const u = usage as Record<string, unknown> | null;
+                const prompt = Number(u?.prompt_tokens ?? u?.input_tokens ?? 0);
+                const completion = Number(u?.completion_tokens ?? u?.output_tokens ?? 0);
+                const content = passthroughAccumulatedContent.trim() || "";
+                const message: Record<string, unknown> = {
+                  role: "assistant",
+                  content: content || null,
+                };
+                if (passthroughToolCalls.size > 0) {
+                  message.tool_calls = [...passthroughToolCalls.values()].sort(
+                    (a, b) => a.index - b.index
+                  );
+                }
+                const responseBody = {
+                  choices: [
+                    {
+                      message,
+                      finish_reason: passthroughHasToolCalls ? "tool_calls" : "stop",
+                    },
+                  ],
+                  usage: {
+                    prompt_tokens: prompt,
+                    completion_tokens: completion,
+                    total_tokens: prompt + completion,
+                  },
+                  _streamed: true,
+                };
+                onComplete({ status: 200, usage, responseBody });
               } catch {}
             }
             return;
@@ -431,9 +589,30 @@ export function createSSEStream(options: StreamOptions = {}) {
           if (buffer.trim()) {
             const parsed = parseSSELine(buffer.trim());
             if (parsed && !parsed.done) {
-              // Extract usage from remaining buffer (was missing — caused 0 tokens in call_logs)
+              // Extract usage from remaining buffer — if the usage-bearing event
+              // (e.g. response.completed) is the last SSE line, it ends up here
+              // in the flush handler where extractUsage was not called.
+              // Non-destructive merge: some providers send usage across multiple
+              // events (e.g. prompt_tokens in message_start, completion_tokens
+              // in message_delta). Direct assignment would lose earlier data.
               const extracted = extractUsage(parsed);
-              if (extracted) state.usage = extracted;
+              if (extracted) {
+                if (!state.usage) {
+                  state.usage = extracted;
+                } else {
+                  const su = state.usage as Record<string, number>;
+                  const eu = extracted as Record<string, number>;
+                  if (eu.prompt_tokens > 0) su.prompt_tokens = eu.prompt_tokens;
+                  if (eu.completion_tokens > 0) su.completion_tokens = eu.completion_tokens;
+                  if (eu.total_tokens > 0) su.total_tokens = eu.total_tokens;
+                  if (eu.cache_read_input_tokens > 0)
+                    su.cache_read_input_tokens = eu.cache_read_input_tokens;
+                  if (eu.cache_creation_input_tokens > 0)
+                    su.cache_creation_input_tokens = eu.cache_creation_input_tokens;
+                  if (eu.cached_tokens > 0) su.cached_tokens = eu.cached_tokens;
+                  if (eu.reasoning_tokens > 0) su.reasoning_tokens = eu.reasoning_tokens;
+                }
+              }
 
               const translated = translateResponse(targetFormat, sourceFormat, parsed, state);
 
@@ -504,10 +683,49 @@ export function createSSEStream(options: StreamOptions = {}) {
               status: "200 OK",
             }).catch(() => {});
           }
-          // Notify caller for call log persistence
+          // Notify caller for call log persistence (include full response body with accumulated content)
           if (onComplete) {
             try {
-              onComplete({ status: 200, usage: state?.usage });
+              const u = state?.usage as Record<string, unknown> | null | undefined;
+              const prompt = Number(u?.prompt_tokens ?? u?.input_tokens ?? 0);
+              const completion = Number(u?.completion_tokens ?? u?.output_tokens ?? 0);
+              const content = (state?.accumulatedContent ?? "").trim() || "";
+              const message: Record<string, unknown> = {
+                role: "assistant",
+                content: content || null,
+              };
+              const hasToolCalls = state?.toolCalls?.size > 0;
+              if (hasToolCalls) {
+                // Normalize shape — translators may store different structures
+                message.tool_calls = [...state.toolCalls.values()]
+                  .map(
+                    (tc: Record<string, unknown>): ToolCall => ({
+                      id: (tc.id as string) ?? null,
+                      index: (tc.index as number) ?? (tc.blockIndex as number) ?? 0,
+                      type: (tc.type as string) ?? "function",
+                      function: (tc.function as ToolCall["function"]) ?? {
+                        name: (tc.name as string) ?? "",
+                        arguments: "",
+                      },
+                    })
+                  )
+                  .sort((a, b) => a.index - b.index);
+              }
+              const responseBody = {
+                choices: [
+                  {
+                    message,
+                    finish_reason: hasToolCalls ? "tool_calls" : "stop",
+                  },
+                ],
+                usage: {
+                  prompt_tokens: prompt,
+                  completion_tokens: completion,
+                  total_tokens: prompt + completion,
+                },
+                _streamed: true,
+              };
+              onComplete({ status: 200, usage: state?.usage, responseBody });
             } catch {}
           }
         } catch (error) {

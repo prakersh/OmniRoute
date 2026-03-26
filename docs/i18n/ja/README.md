@@ -11,18 +11,6 @@ _ユニバーサル API プロキシ — 1 つのエンドポイント、36 以�
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 お気に入りのコーディング エージェント向けの無料 AI プロバイダー
 
 _AI を活用した IDE または CLI ツールを、無制限のコーディングのための無料 API ゲートウェイである OmniRoute 経由で接続します。_
@@ -105,6 +93,34 @@ _AI を活用した IDE または CLI ツールを、無制限のコーディン
   </table>
 
 <sub>📡 すべてのエージェントは <code>http://localhost:20128/v1</code> または <code>http://cloud.omniroute.online/v1</code> 経由で接続します — 1 つの構成、無制限のモデルとクォータ</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -864,14 +880,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 マルチモーダル API
 
-| 特集                    | 何をするのか                                                    |
-| ----------------------- | --------------------------------------------------------------- |
-| 🖼️ **画像生成**         | `/v1/images/generations` — 4 つのプロバイダー、9 つ以上のモデル |
-| 📐 **埋め込み**         | `/v1/embeddings` — 6 つのプロバイダー、9 つ以上のモデル         |
-| 🎤 **音声文字起こし**   | `/v1/audio/transcriptions` — ウィスパー互換                     |
-| 🔊 **テキスト読み上げ** | `/v1/audio/speech` — マルチプロバイダーのオーディオ合成         |
-| 🛡️ **モデレーション**   | `/v1/moderations` — コンテンツの安全性チェック                  |
-| 🔀 **再ランキング**     | `/v1/rerank` — ドキュメントの関連性の再ランキング               |
+| 特集                    | 何をするのか                                                                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **画像生成**         | `/v1/images/generations` — 4 つのプロバイダー、9 つ以上のモデル                                                                                                            |
+| 📐 **埋め込み**         | `/v1/embeddings` — 6 つのプロバイダー、9 つ以上のモデル                                                                                                                    |
+| 🎤 **音声文字起こし**   | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **テキスト読み上げ** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **モデレーション**   | `/v1/moderations` — コンテンツの安全性チェック                                                                                                                             |
+| 🔀 **再ランキング**     | `/v1/rerank` — ドキュメントの関連性の再ランキング                                                                                                                          |
 
 ### 🛡️ 復元力とセキュリティ
 

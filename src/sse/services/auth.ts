@@ -16,6 +16,7 @@ import {
 } from "@omniroute/open-sse/services/accountFallback.ts";
 import { isLocalProvider } from "@omniroute/open-sse/config/providerRegistry.ts";
 import { COOLDOWN_MS } from "@omniroute/open-sse/config/constants.ts";
+import { getCodexModelScope } from "@omniroute/open-sse/executors/codex.ts";
 import * as log from "../utils/logger";
 import { fisherYatesShuffle, getNextFromDeckSync } from "@/shared/utils/shuffleDeck";
 
@@ -132,12 +133,88 @@ function normalizeWindowName(windowName: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getLegacyCodexWindows(providerSpecificData: JsonRecord): string[] {
+function uniqueWindows(windows: string[]): string[] {
+  return [...new Set(windows)];
+}
+
+function normalizeCodexWindowName(windowName: unknown): string | null {
+  if (typeof windowName !== "string") return null;
+  const normalized = windowName.trim().toLowerCase();
+  if (normalized === "session (5h)" || normalized === "5h" || normalized === "five_hour") {
+    return "session";
+  }
+  if (normalized === "weekly (7d)" || normalized === "7d" || normalized === "seven_day") {
+    return "weekly";
+  }
+  return normalized;
+}
+
+function applyCodexWindowPolicy(rawWindows: string[], providerSpecificData: JsonRecord): string[] {
   const codexPolicy = getCodexLimitPolicy(providerSpecificData);
-  const windows: string[] = [];
+  const normalizedRaw = rawWindows.map(normalizeCodexWindowName).filter(Boolean) as string[];
+
+  // Preserve explicitly configured custom windows, but enforce canonical Codex windows
+  // from toggles so weekly exhaustion is never skipped when useWeekly=true.
+  let windows = [...normalizedRaw];
+  windows = windows.filter((windowName) => {
+    if (windowName === "session") return codexPolicy.use5h;
+    if (windowName === "weekly") return codexPolicy.useWeekly;
+    return true;
+  });
   if (codexPolicy.use5h) windows.push("session");
   if (codexPolicy.useWeekly) windows.push("weekly");
-  return windows;
+
+  return uniqueWindows(windows);
+}
+
+function getCodexScopeRateLimitedUntil(
+  providerSpecificData: JsonRecord,
+  model: string | null
+): string | null {
+  if (!model) return null;
+  const scope = getCodexModelScope(model);
+  const scopeMap = asRecord(providerSpecificData.codexScopeRateLimitedUntil);
+  const value = scopeMap[scope];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function isCodexScopeUnavailable(
+  connection: ProviderConnectionView,
+  model: string | null
+): boolean {
+  const until = getCodexScopeRateLimitedUntil(connection.providerSpecificData, model);
+  if (!until) return false;
+  return new Date(until).getTime() > Date.now();
+}
+
+function getEarliestCodexScopeRateLimitedUntil(
+  connections: ProviderConnectionView[],
+  model: string | null
+): string | null {
+  let earliest: string | null = null;
+  let earliestMs = Infinity;
+
+  for (const conn of connections) {
+    const until = getCodexScopeRateLimitedUntil(conn.providerSpecificData, model);
+    if (!until) continue;
+    const ms = new Date(until).getTime();
+    if (!Number.isFinite(ms) || ms <= Date.now()) continue;
+    if (ms < earliestMs) {
+      earliest = until;
+      earliestMs = ms;
+    }
+  }
+
+  return earliest;
+}
+
+function normalizeStatus(value: string | null): string {
+  return (value || "").trim().toLowerCase();
+}
+
+function isTerminalConnectionStatus(connection: ProviderConnectionView): boolean {
+  const status = normalizeStatus(connection.testStatus);
+  return status === "credits_exhausted" || status === "banned" || status === "expired";
 }
 
 export function resolveQuotaLimitPolicy(
@@ -149,8 +226,7 @@ export function resolveQuotaLimitPolicy(
   const windows = rawWindows.map(normalizeWindowName).filter(Boolean) as string[];
 
   if (provider === "codex") {
-    const fallbackWindows = getLegacyCodexWindows(providerSpecificData);
-    const defaultWindows = windows.length > 0 ? windows : fallbackWindows;
+    const defaultWindows = applyCodexWindowPolicy(windows, providerSpecificData);
     const enabled = toBooleanOrDefault(rawPolicy.enabled, defaultWindows.length > 0);
 
     return {
@@ -234,7 +310,8 @@ export { fisherYatesShuffle, getNextFromDeckSync as getNextFromDeck };
 export async function getProviderCredentials(
   provider: string,
   excludeConnectionId: string | null = null,
-  allowedConnections: string[] | null = null
+  allowedConnections: string[] | null = null,
+  requestedModel: string | null = null
 ) {
   // Acquire mutex to prevent race conditions
   const currentMutex = selectionMutex;
@@ -295,6 +372,8 @@ export async function getProviderCredentials(
     const availableConnections = connections.filter((c) => {
       if (excludeConnectionId && c.id === excludeConnectionId) return false;
       if (isAccountUnavailable(c.rateLimitedUntil)) return false;
+      if (isTerminalConnectionStatus(c)) return false;
+      if (provider === "codex" && isCodexScopeUnavailable(c, requestedModel)) return false;
       return true;
     });
 
@@ -305,16 +384,27 @@ export async function getProviderCredentials(
     connections.forEach((c) => {
       const excluded = excludeConnectionId && c.id === excludeConnectionId;
       const rateLimited = isAccountUnavailable(c.rateLimitedUntil);
+      const terminalStatus = isTerminalConnectionStatus(c);
+      const codexScopeLimited = provider === "codex" && isCodexScopeUnavailable(c, requestedModel);
       if (excluded || rateLimited) {
         log.debug(
           "AUTH",
           `  → ${c.id?.slice(0, 8)} | ${excluded ? "excluded" : ""} ${rateLimited ? `rateLimited until ${c.rateLimitedUntil}` : ""}`
         );
+      } else if (terminalStatus) {
+        log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | skipped terminal status=${c.testStatus}`);
+      } else if (codexScopeLimited) {
+        const scopeUntil = getCodexScopeRateLimitedUntil(c.providerSpecificData, requestedModel);
+        log.debug("AUTH", `  → ${c.id?.slice(0, 8)} | codex scope-limited until ${scopeUntil}`);
       }
     });
 
     if (availableConnections.length === 0) {
-      const earliest = getEarliestRateLimitedUntil(connections);
+      const earliest =
+        getEarliestRateLimitedUntil(connections) ||
+        (provider === "codex"
+          ? getEarliestCodexScopeRateLimitedUntil(connections, requestedModel)
+          : null);
       if (earliest) {
         // Find the connection with the earliest rateLimitedUntil to get its error info
         const rateLimitedConns = connections.filter(
@@ -593,6 +683,15 @@ export async function markAccountUnavailable(
     const conn = connections.find((connection) => connection.id === connectionId);
     const backoffLevel = conn?.backoffLevel || 0;
 
+    // T06/T10/T36: terminal statuses should not be overwritten by transient cooldown state.
+    if (conn && isTerminalConnectionStatus(conn)) {
+      log.info(
+        "AUTH",
+        `${connectionId.slice(0, 8)} terminal status=${conn.testStatus}, skipping cooldown overwrite`
+      );
+      return { shouldFallback: true, cooldownMs: 0 };
+    }
+
     // ─── Anti-Thundering Herd Guard ─────────────────────────────────
     // If this connection was ALREADY marked unavailable by a prior concurrent
     // request (within the mutex window), skip re-marking to avoid resetting
@@ -606,6 +705,24 @@ export async function markAccountUnavailable(
         shouldFallback: true,
         cooldownMs: new Date(conn.rateLimitedUntil).getTime() - Date.now(),
       };
+    }
+
+    // T09: Codex scope-aware lockout guard (codex vs spark independent pools).
+    if (provider === "codex" && model) {
+      const scopeRateLimitedUntil = getCodexScopeRateLimitedUntil(
+        conn?.providerSpecificData || {},
+        model
+      );
+      if (scopeRateLimitedUntil && new Date(scopeRateLimitedUntil).getTime() > Date.now()) {
+        log.info(
+          "AUTH",
+          `${connectionId.slice(0, 8)} already scope-limited for ${getCodexModelScope(model)} (until ${scopeRateLimitedUntil}), skipping duplicate mark`
+        );
+        return {
+          shouldFallback: true,
+          cooldownMs: new Date(scopeRateLimitedUntil).getTime() - Date.now(),
+        };
+      }
     }
 
     const { shouldFallback, cooldownMs, newBackoffLevel, reason } = checkFallbackError(
@@ -636,6 +753,40 @@ export async function markAccountUnavailable(
 
     const rateLimitedUntil = getUnavailableUntil(cooldownMs);
     const errorMsg = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
+
+    // T09: Codex per-scope lockout (do not block the whole account globally).
+    if (provider === "codex" && status === 429 && model && conn) {
+      const scope = getCodexModelScope(model);
+      const existingScopeMap = asRecord(conn.providerSpecificData.codexScopeRateLimitedUntil);
+      const persistedScopeUntil = getCodexScopeRateLimitedUntil(conn.providerSpecificData, model);
+      const scopeRateLimitedUntil = persistedScopeUntil || rateLimitedUntil;
+      const scopeCooldownMs = Math.max(new Date(scopeRateLimitedUntil).getTime() - Date.now(), 0);
+
+      await updateProviderConnection(connectionId, {
+        testStatus: "unavailable",
+        lastError: errorMsg,
+        errorCode: status,
+        lastErrorAt: new Date().toISOString(),
+        backoffLevel: newBackoffLevel ?? backoffLevel,
+        providerSpecificData: {
+          ...conn.providerSpecificData,
+          codexScopeRateLimitedUntil: {
+            ...existingScopeMap,
+            [scope]: scopeRateLimitedUntil,
+          },
+        },
+      });
+
+      if (scopeCooldownMs > 0) {
+        lockModel(provider, connectionId, model, reason || "unknown", scopeCooldownMs);
+      }
+
+      if (status && errorMsg) {
+        console.error(`❌ ${provider} [${status}] (${scope}): ${errorMsg}`);
+      }
+
+      return { shouldFallback: true, cooldownMs: scopeCooldownMs };
+    }
 
     await updateProviderConnection(connectionId, {
       rateLimitedUntil,

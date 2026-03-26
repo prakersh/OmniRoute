@@ -5,23 +5,11 @@
 
 ### Huwag kailanman ihinto ang coding. Smart routing sa **LIBRE at murang mga modelo ng AI** na may awtomatikong fallback.
 
-_Iyong unibersal na API proxy — isang endpoint, 36+ provider, zero downtime._
+_Iyong unibersal na API proxy — isang endpoint, 67+ provider, zero downtime._
 
 **Mga Pagkumpleto ng Chat • Mga Pag-embed • Pagbuo ng Imahe • Audio • Pag-rerank • 100% TypeScript**
 
 ---
-
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
 
 ### 🤖 Libreng AI Provider para sa iyong mga paboritong coding agent
 
@@ -105,6 +93,34 @@ _Ikonekta ang anumang AI-powered IDE o CLI tool sa pamamagitan ng OmniRoute — 
   </table>
 
 <sub>📡 Kumonekta ang lahat ng ahente sa pamamagitan ng <code>http://localhost:20128/v1</code> o <code>http://cloud.omniroute.online/v1 >http://cloud.omniroute.online/v1 —iisang modelo at hindi config. quota</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -236,7 +252,7 @@ Gumagamit ang OpenAI ng isang format, gumagamit si Claude (Anthropic) ng isa pa,
 
 **Paano ito niresolba ng OmniRoute:**
 
-- **Pinag-isang Endpoint** — Isang `http://localhost:20128/v1` ang nagsisilbing proxy para sa lahat ng 36+ provider
+- **Pinag-isang Endpoint** — Isang `http://localhost:20128/v1` ang nagsisilbing proxy para sa lahat ng 67+ provider
 - **Format Translation** — Awtomatiko at transparent: OpenAI ↔ Claude ↔ Gemini ↔ Responses API
 - **Response Sanitization** — Tinatanggal ang mga hindi karaniwang field (`x_groq`, `usage_breakdown`, `service_tier`) na sumisira sa OpenAI SDK v1.83+
 - **Role Normalization** — Kino-convert ang `developer` → `system` para sa mga provider na hindi OpenAI; `system` → `user` para sa GLM/ERNIE
@@ -321,7 +337,7 @@ Gumagamit ang mga developer ng Cursor, Claude Code, Codex CLI, OpenClaw, Gemini 
 - **CLI Tools Dashboard** — Nakatuon na page na may isang-click na setup para sa Claude Code, Codex CLI, OpenClaw, Kilo Code, Antigravity, Cline
 - **GitHub Copilot Config Generator** — Bumubuo ng `chatLanguageModels.json` para sa VS Code na may maramihang pagpili ng modelo
 - **Onboarding Wizard** — May gabay na 4-step na pag-setup para sa mga unang beses na user
-- **Isang endpoint, lahat ng modelo** — I-configure ang `http://localhost:20128/v1` nang isang beses, i-access ang 36+ provider
+- **Isang endpoint, lahat ng modelo** — I-configure ang `http://localhost:20128/v1` nang isang beses, i-access ang 67+ provider
 
 </details>
 
@@ -863,14 +879,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 Mga Multi-Modal na API
 
-| Tampok                     | Ano ang Ginagawa Nito                                        |
-| -------------------------- | ------------------------------------------------------------ |
-| 🖼️ **Pagbuo ng Larawan**   | `/v1/images/generations` — 4 na provider, 9+ na modelo       |
-| 📐 **Mga Pag-embed**       | `/v1/embeddings` — 6 na provider, 9+ na modelo               |
-| 🎤 **Audio Transcription** | `/v1/audio/transcriptions` — Whisper-compatible              |
-| 🔊 **Text-to-Speech**      | `/v1/audio/speech` — Multi-provider audio synthesis          |
-| 🛡️ **Mga Pag-moderate**    | `/v1/moderations` — Mga pagsusuri sa kaligtasan ng nilalaman |
-| 🔀 **Reranking**           | `/v1/rerank` — Muling pagraranggo ng kaugnayan ng dokumento  |
+| Tampok                     | Ano ang Ginagawa Nito                                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Pagbuo ng Larawan**   | `/v1/images/generations` — 4 na provider, 9+ na modelo                                                                                                                     |
+| 📐 **Mga Pag-embed**       | `/v1/embeddings` — 6 na provider, 9+ na modelo                                                                                                                             |
+| 🎤 **Audio Transcription** | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Text-to-Speech**      | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Mga Pag-moderate**    | `/v1/moderations` — Mga pagsusuri sa kaligtasan ng nilalaman                                                                                                               |
+| 🔀 **Reranking**           | `/v1/rerank` — Muling pagraranggo ng kaugnayan ng dokumento                                                                                                                |
 
 ### 🛡️ Katatagan at Seguridad
 

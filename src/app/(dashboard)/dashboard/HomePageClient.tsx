@@ -8,6 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardSkeleton, Button, Modal } from "@/shared/components";
+import ProviderIcon from "@/shared/components/ProviderIcon";
 import { AI_PROVIDERS, FREE_PROVIDERS, OAUTH_PROVIDERS } from "@/shared/constants/providers";
 import { useNotificationStore } from "@/store/notificationStore";
 import { copyToClipboard } from "@/shared/utils/clipboard";
@@ -23,6 +24,9 @@ export default function HomePageClient({ machineId }) {
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [providerMetrics, setProviderMetrics] = useState({});
 
+  const [versionInfo, setVersionInfo] = useState<any>(null);
+  const [updating, setUpdating] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setBaseUrl(`${window.location.origin}/v1`);
@@ -31,10 +35,11 @@ export default function HomePageClient({ machineId }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [provRes, modelsRes, metricsRes] = await Promise.all([
+      const [provRes, modelsRes, metricsRes, versionRes] = await Promise.all([
         fetch("/api/providers"),
         fetch("/api/models"),
         fetch("/api/provider-metrics"),
+        fetch("/api/system/version"),
       ]);
       if (provRes.ok) {
         const provData = await provRes.json();
@@ -47,6 +52,10 @@ export default function HomePageClient({ machineId }) {
       if (metricsRes.ok) {
         const metricsData = await metricsRes.json();
         setProviderMetrics(metricsData.metrics || {});
+      }
+      if (versionRes.ok) {
+        const versionData = await versionRes.json();
+        setVersionInfo(versionData);
       }
     } catch (e) {
       console.log("Error fetching data:", e);
@@ -123,6 +132,27 @@ export default function HomePageClient({ machineId }) {
     },
   ];
 
+  const handleUpdate = async () => {
+    const notify = useNotificationStore.getState();
+    setUpdating(true);
+    try {
+      notify.info(t("updateStarted") || "Update process started...");
+      const res = await fetch("/api/system/version", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        notify.success(
+          data.message || "Update initiated successfully. The system will restart shortly."
+        );
+      } else {
+        notify.error(data.error || "Failed to start update.");
+        setUpdating(false);
+      }
+    } catch {
+      notify.error("Network error while trying to update.");
+      setUpdating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col gap-8">
@@ -136,6 +166,30 @@ export default function HomePageClient({ machineId }) {
 
   return (
     <div className="flex flex-col gap-8">
+      {/* Update Notification Banner */}
+      {versionInfo?.updateAvailable && (
+        <div className="bg-primary/10 border border-primary/20 text-primary px-5 py-4 rounded-xl flex items-center justify-between min-h-[64px]">
+          <div className="flex items-center gap-4">
+            <span className="material-symbols-outlined text-[24px]">system_update_alt</span>
+            <div>
+              <p className="font-semibold text-sm">Update Available: v{versionInfo.latest}</p>
+              <p className="text-xs opacity-80 mt-0.5">
+                {t("updateAvailableDesc") ||
+                  `You are currently using v${versionInfo.current}. Update to access the latest features and bug fixes.`}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleUpdate}
+            disabled={updating}
+            className="shrink-0 ml-4 font-semibold"
+          >
+            {updating ? t("updating") || "Updating..." : t("updateNow") || "Update Now"}
+          </Button>
+        </div>
+      )}
+
       {/* Quick Start */}
       <Card>
         <div className="flex flex-col gap-5">
@@ -303,7 +357,6 @@ HomePageClient.propTypes = {
 };
 
 function ProviderOverviewCard({ item, metrics, onClick }) {
-  const [imgError, setImgError] = useState(false);
   const t = useTranslations("home");
   const tc = useTranslations("common");
 
@@ -327,24 +380,7 @@ function ProviderOverviewCard({ item, metrics, onClick }) {
           className="size-8 rounded-lg flex items-center justify-center shrink-0"
           style={{ backgroundColor: `${item.provider.color || "#888"}15` }}
         >
-          {imgError ? (
-            <span
-              className="text-[10px] font-bold"
-              style={{ color: item.provider.color || "#888" }}
-            >
-              {item.provider.textIcon || item.provider.id.slice(0, 2).toUpperCase()}
-            </span>
-          ) : (
-            <Image
-              src={`/providers/${item.provider.id}.png`}
-              alt={item.provider.name}
-              width={26}
-              height={26}
-              className="object-contain rounded-lg"
-              sizes="26px"
-              onError={() => setImgError(true)}
-            />
-          )}
+          <ProviderIcon providerId={item.provider.id} size={26} type="color" />
         </div>
 
         <div className="min-w-0 flex-1">

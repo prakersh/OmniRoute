@@ -11,18 +11,6 @@ _Ваш универсальный API-прокси — одна точка до
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Бесплатный AI-провайдер для ваших любимых агентов программирования
 
 _Подключайте любую IDE или CLI-инструмент с AI через OmniRoute — бесплатный API gateway для неограниченного программирования._
@@ -105,6 +93,34 @@ _Подключайте любую IDE или CLI-инструмент с AI ч�
   </table>
 
 <sub>📡 Все агенты подключаются через <code>http://localhost:20128/v1</code> или <code>http://cloud.omniroute.online/v1</code> — одна конфигурация, неограниченные модели и квота</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -366,7 +382,7 @@ Claude Code, Codex, Gemini CLI, Copilot — все используют OAuth 2.
 - **Панель управления унифицированными журналами** — 4 вкладки: журналы запросов, журналы прокси, журналы аудита, консоль.
 - **Консольный просмотр журнала** — просмотрщик в режиме терминала в режиме реального времени с уровнями с цветовой кодировкой, автоматической прокруткой, поиском и фильтрацией.
 - **Журналы прокси-сервера SQLite** — постоянные журналы, сохраняющиеся после перезапуска сервера.
-- **Площадка переводчика** — 4 режима отладки: Площадка (перевод формата), Тестер чата (туда и обратно), Тестовый стенд (пакетный), Мониторинг в реальном времени (в режиме реального времени).
+- **Площадка транслятора (Translator Playground)** — 4 режима отладки: Площадка (перевод формата), Тестер чата (туда и обратно), Тестовый стенд (пакетный), Мониторинг в реальном времени (в режиме реального времени).
 - **Запрос телеметрии** — задержка p50/p95/p99 + отслеживание X-Request-Id
 - **Журналирование на основе файлов с ротацией** — перехватчик консоли записывает все в журнал JSON с ротацией на основе размера.
 
@@ -431,7 +447,7 @@ Claude Code, Codex, Gemini CLI, Copilot — все используют OAuth 2.
 
 - **Оценки LLM** — тестирование золотого набора с 10 предварительно загруженными вариантами, охватывающими приветствия, математику, географию, генерацию кода, соответствие JSON, перевод, уценку, отказ от безопасности.
 - **4 стратегии сопоставления** — `exact`, `contains`, `regex`, `custom` (функция JS)
-- **Тестовый стенд Translator Playground** — пакетное тестирование с несколькими входными данными и ожидаемыми результатами, сравнение между поставщиками.
+- **Тестовый стенд (Testbed)** — пакетное тестирование с несколькими входными данными и ожидаемыми результатами, сравнение между поставщиками.
 - **Тестер чата** — полный цикл с визуальным отображением ответов.
 - **Живой монитор** — поток всех запросов, проходящих через прокси, в реальном времени.
 
@@ -863,14 +879,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 Мультимодальные API
 
-| Функция                      | Что делает                                          |
-| ---------------------------- | --------------------------------------------------- |
-| 🖼️ **Генерация изображений** | `/v1/images/generations` — 4 провайдера, 9+ моделей |
-| 📐 **Embeddings**            | `/v1/embeddings` — 6 провайдеров, 9+ моделей        |
-| 🎤 **Транскрипция аудио**    | `/v1/audio/transcriptions` — Совместимо с Whisper   |
-| 🔊 **Текст в речь**          | `/v1/audio/speech` — Мульти-провайдерный синтез     |
-| 🛡️ **Модерация**             | `/v1/moderations` — Проверки безопасности контента  |
-| 🔀 **Reranking**             | `/v1/rerank` — Переранжирование релевантности       |
+| Функция                      | Что делает                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Генерация изображений** | `/v1/images/generations` — 4 провайдера, 9+ моделей                                                                                                                        |
+| 📐 **Embeddings**            | `/v1/embeddings` — 6 провайдеров, 9+ моделей                                                                                                                               |
+| 🎤 **Транскрипция аудио**    | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Текст в речь**          | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Модерация**             | `/v1/moderations` — Проверки безопасности контента                                                                                                                         |
+| 🔀 **Reranking**             | `/v1/rerank` — Переранжирование релевантности                                                                                                                              |
 
 ### 🛡️ Устойчивость и безопасность
 
@@ -996,7 +1012,7 @@ OmniRoute включает встроенный фреймворк оценки 
 
 - Приветствия, математика, география, генерация кода
 - Соответствие формату JSON, перевод, markdown
-- Отказ от небезопасного контента, подсчёт, булева логика
+- Отказ от небезопасного контента (Safety refusal), подсчёт, булева логика
 
 ### Стратегии оценки
 

@@ -11,18 +11,6 @@ _Az univerzális API-proxy – egy végpont, 36+ szolgáltató, nulla állásid�
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Ingyenes mesterséges intelligencia szolgáltató kedvenc kódoló ügynökei számára
 
 _Csatlakoztasson bármilyen mesterséges intelligencia-alapú IDE-t vagy CLI-eszközt az OmniRoute-on keresztül – ingyenes API-átjáró a korlátlan kódoláshoz._
@@ -105,6 +93,34 @@ _Csatlakoztasson bármilyen mesterséges intelligencia-alapú IDE-t vagy CLI-esz
   </table>
 
 <sub>📡 Minden ügyintéző a <code>http://localhost:20128/v1</code> vagy <code>http://cloud.omni_TOKEN_244\_\_http://cloud.omniroute_EN_2NI4/v_1_TO_2.online-on keresztül csatlakozik konfiguráció, korlátlan modellek és kvóta</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -864,14 +880,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 Multimodális API-k
 
-| Funkció                | Mit csinál                                                   |
-| ---------------------- | ------------------------------------------------------------ |
-| 🖼️ **Képgenerálás**    | `/v1/images/generations` — 4 szolgáltató, 9+ modell          |
-| 📐 **Beágyazás**       | `/v1/embeddings` — 6 szolgáltató, 9+ modell                  |
-| 🎤 **Audio átírás**    | `/v1/audio/transcriptions` — Suttogás-kompatibilis           |
-| 🔊 **Szövegfelolvasó** | `/v1/audio/speech` — Hangszintézis több szolgáltatónál       |
-| 🛡️ **Moderálás**       | `/v1/moderations` — Tartalombiztonsági ellenőrzések          |
-| 🔀 **Átsorolás**       | `/v1/rerank` — A dokumentumok relevancia szerinti átsorolása |
+| Funkció                | Mit csinál                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Képgenerálás**    | `/v1/images/generations` — 4 szolgáltató, 9+ modell                                                                                                                        |
+| 📐 **Beágyazás**       | `/v1/embeddings` — 6 szolgáltató, 9+ modell                                                                                                                                |
+| 🎤 **Audio átírás**    | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Szövegfelolvasó** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Moderálás**       | `/v1/moderations` — Tartalombiztonsági ellenőrzések                                                                                                                        |
+| 🔀 **Átsorolás**       | `/v1/rerank` — A dokumentumok relevancia szerinti átsorolása                                                                                                               |
 
 ### 🛡️ Rugalmasság és biztonság
 

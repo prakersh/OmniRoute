@@ -11,18 +11,6 @@ _범용 API 프록시 — 하나의 엔드포인트, 36개 이상의 공급자, 
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 좋아하는 코딩 에이전트를 위한 무료 AI 제공업체
 
 _무제한 코딩을 위한 무료 API 게이트웨이인 OmniRoute를 통해 AI 기반 IDE 또는 CLI 도구를 연결하세요._
@@ -105,6 +93,34 @@ _무제한 코딩을 위한 무료 API 게이트웨이인 OmniRoute를 통해 AI
   </table>
 
 <sub>📡 모든 에이전트는 <code>http://localhost:20128/v1</code> 또는 <code>http://cloud.omniroute.online/v1</code>을 통해 연결됩니다. — 하나의 구성, 무제한 모델 및 할당량</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -863,14 +879,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 다중 모드 API
 
-| 기능                    | 그것이 하는 일                                         |
-| ----------------------- | ------------------------------------------------------ |
-| 🖼️ **이미지 생성**      | `/v1/images/generations` — 4개 공급자, 9개 이상의 모델 |
-| 📐 **임베딩**           | `/v1/embeddings` — 6개 공급자, 9개 이상의 모델         |
-| 🎤 **오디오 전사**      | `/v1/audio/transcriptions` — 속삭임 호환               |
-| 🔊 **텍스트 음성 변환** | `/v1/audio/speech` — 다중 제공자 오디오 합성           |
-| 🛡️ **조정**             | `/v1/moderations` — 콘텐츠 안전 확인                   |
-| 🔀 **재순위**           | `/v1/rerank` — 문서 관련성 재순위                      |
+| 기능                    | 그것이 하는 일                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **이미지 생성**      | `/v1/images/generations` — 4개 공급자, 9개 이상의 모델                                                                                                                     |
+| 📐 **임베딩**           | `/v1/embeddings` — 6개 공급자, 9개 이상의 모델                                                                                                                             |
+| 🎤 **오디오 전사**      | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **텍스트 음성 변환** | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **조정**             | `/v1/moderations` — 콘텐츠 안전 확인                                                                                                                                       |
+| 🔀 **재순위**           | `/v1/rerank` — 문서 관련성 재순위                                                                                                                                          |
 
 ### 🛡️ 복원력 및 보안
 

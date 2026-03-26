@@ -6,6 +6,11 @@ import { KiroExecutor } from "./kiro.ts";
 import { CodexExecutor } from "./codex.ts";
 import { CursorExecutor } from "./cursor.ts";
 import { DefaultExecutor } from "./default.ts";
+import { PollinationsExecutor } from "./pollinations.ts";
+import { CloudflareAIExecutor } from "./cloudflare-ai.ts";
+import { OpencodeExecutor } from "./opencode.ts";
+import { PuterExecutor } from "./puter.ts";
+import { VertexExecutor } from "./vertex.ts";
 
 const executors = {
   antigravity: new AntigravityExecutor(),
@@ -16,6 +21,15 @@ const executors = {
   codex: new CodexExecutor(),
   cursor: new CursorExecutor(),
   cu: new CursorExecutor(), // Alias for cursor
+  pollinations: new PollinationsExecutor(),
+  pol: new PollinationsExecutor(), // Alias
+  "cloudflare-ai": new CloudflareAIExecutor(),
+  cf: new CloudflareAIExecutor(), // Alias
+  "opencode-zen": new OpencodeExecutor("opencode-zen"),
+  "opencode-go": new OpencodeExecutor("opencode-go"),
+  puter: new PuterExecutor(),
+  pu: new PuterExecutor(), // Alias
+  vertex: new VertexExecutor(),
 };
 
 const defaultCache = new Map();
@@ -39,3 +53,8 @@ export { KiroExecutor } from "./kiro.ts";
 export { CodexExecutor } from "./codex.ts";
 export { CursorExecutor } from "./cursor.ts";
 export { DefaultExecutor } from "./default.ts";
+export { PollinationsExecutor } from "./pollinations.ts";
+export { CloudflareAIExecutor } from "./cloudflare-ai.ts";
+export { OpencodeExecutor } from "./opencode.ts";
+export { PuterExecutor } from "./puter.ts";
+export { VertexExecutor } from "./vertex.ts";

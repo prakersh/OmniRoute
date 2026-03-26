@@ -11,18 +11,6 @@ _Váš univerzálny proxy server API – jeden koncový bod, 36+ poskytovateľov
 
 ---
 
-### 🚀 New in v2.0.9+ — Playground, CLI Fingerprints & ACP
-
-| Feature                                    | What It Does                                                                                                                                  |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🎮 **Model Playground**                    | Dashboard page to test any model directly — provider/model/endpoint selectors, Monaco Editor, streaming, abort, timing                        |
-| 🔏 **CLI Fingerprint Matching**            | Per-provider header/body ordering to match native CLI signatures — toggle per provider in Settings > Security. **Your proxy IP is preserved** |
-| 🤝 **ACP Support (Agent Client Protocol)** | CLI agent discovery (Codex, Claude, Goose, Gemini CLI, OpenClaw), process spawner, `/api/acp/agents` endpoint                                 |
-| 🤖 **ACP Agents Dashboard**                | Debug > Agents page — grid of 14 agents with install status, version, custom agent form for any CLI tool                                      |
-| 🔧 **Custom Model `apiFormat` Routing**    | Custom models with `apiFormat: "responses"` now correctly route to the Responses API translator                                               |
-| 🏢 **Codex Workspace Isolation**           | Multiple Codex workspaces per email — OAuth correctly separates connections by workspace ID                                                   |
-| 🔄 **Electron Auto-Update**                | Desktop app checks for updates + auto-install on restart                                                                                      |
-
 ### 🤖 Bezplatný poskytovateľ AI pre vašich obľúbených kódovacích agentov
 
 _Pripojte akýkoľvek nástroj IDE alebo CLI poháňaný AI cez OmniRoute – bezplatnú bránu API pre neobmedzené kódovanie._
@@ -105,6 +93,34 @@ _Pripojte akýkoľvek nástroj IDE alebo CLI poháňaný AI cez OmniRoute – be
   </table>
 
 <sub>📡 Všetci agenti sa pripájajú cez <code>http://localhost:20128/v1</code> alebo <code>http://cloud.omniroute one/v1 modely a kvóta</sub>
+
+---
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
+
+### 🆕 What's New in v3.0.0
+
+| Area                       | Change                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| 🔒 **CodeQL Security**     | Fixed 10+ CodeQL alerts: polynomial-redos, insecure-randomness, shell-injection   |
+| ✅ **Route Validation**    | All 176 API routes validated with Zod schemas + `validateBody()`                  |
+| 🐛 **omniModel Tag Leak**  | Internal `<omniModel>` tags no longer leak to clients in SSE streams (#585)       |
+| 🔑 **Registered Keys API** | Auto-provision API keys via `POST /api/v1/registered-keys` with quota enforcement |
+| 🎨 **Provider Icons**      | 130+ provider logos via `@lobehub/icons` (SVG) with PNG fallback                  |
+| 🔄 **Model Auto-Sync**     | 24h scheduler refreshes model lists for 16 providers                              |
+| 🌐 **OpenCode Zen/Go**     | Two new providers: free tier + subscription tier                                  |
+| 🔧 **926 Tests**           | Full test suite passes with 0 failures                                            |
 
 ---
 
@@ -867,14 +883,14 @@ npm run electron:build:linux   # Linux (.AppImage)
 
 ### 🎵 Multimodálne API
 
-| Funkcia                     | Čo to robí                                                       |
-| --------------------------- | ---------------------------------------------------------------- |
-| 🖼️ **Generovanie obrázkov** | `/v1/images/generations` — 4 poskytovatelia, 9+ modelov          |
-| 📐 **Vloženie**             | `/v1/embeddings` — 6 poskytovateľov, 9+ modelov                  |
-| 🎤 **Prepis zvuku**         | `/v1/audio/transcriptions` — Kompatibilné so šepotom             |
-| 🔊 **Prevod textu na reč**  | `/v1/audio/speech` — Zvuková syntéza od viacerých poskytovateľov |
-| 🛡️ **Moderovania**          | `/v1/moderations` — Kontroly bezpečnosti obsahu                  |
-| 🔀 **Reranking**            | `/v1/rerank` — Zmena poradia relevantnosti dokumentu             |
+| Funkcia                     | Čo to robí                                                                                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🖼️ **Generovanie obrázkov** | `/v1/images/generations` — 4 poskytovatelia, 9+ modelov                                                                                                                    |
+| 📐 **Vloženie**             | `/v1/embeddings` — 6 poskytovateľov, 9+ modelov                                                                                                                            |
+| 🎤 **Prepis zvuku**         | `/v1/audio/transcriptions` — 7 providers (Deepgram Nova 3, AssemblyAI, Groq Whisper, HuggingFace, ElevenLabs, OpenAI, Azure), auto-language detection, MP4/MP3/WAV support |
+| 🔊 **Prevod textu na reč**  | `/v1/audio/speech` — 10 providers (ElevenLabs, OpenAI, Deepgram, Cartesia, PlayHT, HuggingFace, Nvidia NIM, Inworld, Coqui, Tortoise)                                      |
+| 🛡️ **Moderovania**          | `/v1/moderations` — Kontroly bezpečnosti obsahu                                                                                                                            |
+| 🔀 **Reranking**            | `/v1/rerank` — Zmena poradia relevantnosti dokumentu                                                                                                                       |
 
 ### 🛡️ Odolnosť a bezpečnosť
 

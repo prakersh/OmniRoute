@@ -5,9 +5,12 @@ import {
   extractApiKey,
   isValidApiKey,
 } from "../services/auth";
-import { getModelInfo, getCombo } from "../services/model";
+import { getModelInfo, getComboForModel } from "../services/model";
 import { parseModel } from "@omniroute/open-sse/services/model.ts";
-import { detectFormat, getTargetFormat } from "@omniroute/open-sse/services/provider.ts";
+import {
+  detectFormatFromEndpoint,
+  getTargetFormat,
+} from "@omniroute/open-sse/services/provider.ts";
 import { handleChatCore } from "@omniroute/open-sse/handlers/chatCore.ts";
 import { errorResponse, unavailableResponse } from "@omniroute/open-sse/utils/error.ts";
 import { handleComboChat } from "@omniroute/open-sse/services/combo.ts";
@@ -46,6 +49,14 @@ import {
   applyTaskAwareRouting,
   getTaskRoutingConfig,
 } from "@omniroute/open-sse/services/taskAwareRouter.ts";
+import {
+  generateSessionId as generateStableSessionId,
+  touchSession,
+  extractExternalSessionId,
+  checkSessionLimit,
+  registerKeySession,
+  isSessionRegisteredForKey,
+} from "@omniroute/open-sse/services/sessionManager.ts";
 import {
   isFallbackDecision,
   shouldUseFallback,
@@ -135,9 +146,7 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
     log.debug("AUTH", "No API key provided (local mode)");
   }
 
-  // Optional strict API key mode for /v1 endpoints.
-  // Keep disabled by default to preserve local-mode compatibility.
-  // Exception: X-Internal-Test header bypasses auth for admin-side combo health checks (#350)
+  // Optional strict API key mode for /v1 endpoints (require key on every request).
   const isInternalTest = request.headers?.get?.("x-internal-test") === "combo-health-check";
   if (process.env.REQUIRE_API_KEY === "true" && !isInternalTest) {
     if (!apiKey) {
@@ -149,11 +158,25 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
       log.warn("AUTH", "Invalid API key while REQUIRE_API_KEY=true");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
     }
+  } else if (apiKey && !isInternalTest) {
+    // Client sent a Bearer key — it must exist in DB (otherwise reject to avoid "key ignored" confusion).
+    const valid = await isValidApiKey(apiKey);
+    if (!valid) {
+      log.warn("AUTH", "API key not found or invalid (must be created in API Manager)");
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+    }
   }
 
   if (!modelStr) {
     log.warn("CHAT", "Missing model");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
+  }
+
+  // T04: client-provided external session header has priority over generated fingerprint.
+  const externalSessionId = extractExternalSessionId(request.headers);
+  const sessionId = externalSessionId || generateStableSessionId(body);
+  if (sessionId) {
+    touchSession(sessionId);
   }
 
   // Pipeline: API key policy enforcement (model restrictions + budget limits)
@@ -168,6 +191,25 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
   }
   const apiKeyInfo = policy.apiKeyInfo;
   telemetry.endPhase();
+
+  // T08: per-key active session limit (0 = unlimited).
+  if (apiKeyInfo?.id && sessionId) {
+    const maxSessions =
+      typeof apiKeyInfo.maxSessions === "number" && apiKeyInfo.maxSessions > 0
+        ? apiKeyInfo.maxSessions
+        : 0;
+
+    if (maxSessions > 0 && !isSessionRegisteredForKey(apiKeyInfo.id, sessionId)) {
+      const sessionViolation = checkSessionLimit(apiKeyInfo.id, maxSessions);
+      if (sessionViolation) {
+        return withSessionHeader(
+          errorResponse(HTTP_STATUS.RATE_LIMITED, sessionViolation.message),
+          sessionId
+        );
+      }
+      registerKeySession(apiKeyInfo.id, sessionId);
+    }
+  }
 
   // T05 — Task-Aware Smart Routing
   // Detect the semantic task type and optionally route to the optimal model
@@ -192,7 +234,7 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
 
   // Check if model is a combo (has multiple models with fallback)
   telemetry.startPhase("resolve");
-  const combo = await getCombo(resolvedModelStr);
+  const combo = await getComboForModel(resolvedModelStr);
   if (combo) {
     log.info(
       "CHAT",
@@ -216,7 +258,8 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
       const creds = await getProviderCredentials(
         provider,
         null,
-        apiKeyInfo?.allowedConnections ?? null
+        apiKeyInfo?.allowedConnections ?? null,
+        modelInfo.model || modelString
       );
       if (!creds || creds.allRateLimited) return false;
       return true;
@@ -233,7 +276,9 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
       body,
       combo,
       handleSingleModel: (b: any, m: string) =>
-        handleSingleModelChat(b, m, clientRawRequest, request, combo.name, apiKeyInfo, telemetry),
+        handleSingleModelChat(b, m, clientRawRequest, request, combo.name, apiKeyInfo, telemetry, {
+          sessionId,
+        }),
       isModelAvailable: checkModelAvailable,
       log,
       settings,
@@ -242,7 +287,7 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
 
     // Record telemetry
     recordTelemetry(telemetry);
-    return response;
+    return withSessionHeader(response, sessionId);
   }
   telemetry.endPhase();
 
@@ -254,10 +299,11 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
     request,
     null,
     apiKeyInfo,
-    telemetry
+    telemetry,
+    { sessionId }
   );
   recordTelemetry(telemetry);
-  return response;
+  return withSessionHeader(response, sessionId);
 }
 
 /**
@@ -275,10 +321,10 @@ async function handleSingleModelChat(
   comboName: string | null = null,
   apiKeyInfo: any = null,
   telemetry: any = null,
-  runtimeOptions: { emergencyFallbackTried?: boolean } = {}
+  runtimeOptions: { emergencyFallbackTried?: boolean; sessionId?: string | null } = {}
 ) {
   // 1. Resolve model → provider/model
-  const resolved = await resolveModelOrError(modelStr, body);
+  const resolved = await resolveModelOrError(modelStr, body, clientRawRequest?.endpoint);
   if (resolved.error) return resolved.error;
 
   const { provider, model, sourceFormat, targetFormat, extendedContext } = resolved;
@@ -305,7 +351,8 @@ async function handleSingleModelChat(
     const credentials = await getProviderCredentials(
       provider,
       excludeConnectionId,
-      apiKeyInfo?.allowedConnections ?? null
+      apiKeyInfo?.allowedConnections ?? null,
+      model
     );
 
     if (!credentials || credentials.allRateLimited) {
@@ -328,6 +375,9 @@ async function handleSingleModelChat(
 
     const accountId = credentials.connectionId.slice(0, 8);
     log.info("AUTH", `Using ${provider} account: ${accountId}...`);
+    if (runtimeOptions.sessionId) {
+      touchSession(runtimeOptions.sessionId, credentials.connectionId);
+    }
 
     const refreshedCredentials = await checkAndRefreshToken(provider, credentials);
     const proxyInfo = await safeResolveProxy(credentials.connectionId);
@@ -455,7 +505,7 @@ async function handleSingleModelChat(
 /**
  * Resolve model string to provider/model info, or return an error response.
  */
-async function resolveModelOrError(modelStr: string, body: any) {
+async function resolveModelOrError(modelStr: string, body: any, endpointPath: string = "") {
   const modelInfo = await getModelInfo(modelStr);
   if (!modelInfo.provider) {
     if ((modelInfo as any).errorType === "ambiguous_model") {
@@ -474,7 +524,7 @@ async function resolveModelOrError(modelStr: string, body: any) {
   }
 
   const { provider, model, extendedContext } = modelInfo;
-  const sourceFormat = detectFormat(body);
+  const sourceFormat = detectFormatFromEndpoint(body, endpointPath);
   const providerAlias = PROVIDER_ID_TO_ALIAS[provider] || provider;
 
   // If the custom model specifies apiFormat="responses", override targetFormat
@@ -599,6 +649,23 @@ async function executeChatWithBreaker({
         tlsFingerprintUsed: false,
       };
     }
+
+    // T14: Proxy Fast-Fail should be converted into an upstream-unavailable result
+    // so account fallback logic can continue with another connection.
+    if (cbErr?.code === "PROXY_UNREACHABLE" || /proxy unreachable/i.test(cbErr?.message || "")) {
+      const detail = cbErr?.message || "Proxy unreachable";
+      log.warn("PROXY", detail);
+      return {
+        result: {
+          success: false,
+          response: (unavailableResponse as any)(HTTP_STATUS.SERVICE_UNAVAILABLE, detail, 2),
+          status: HTTP_STATUS.SERVICE_UNAVAILABLE,
+          error: detail,
+        },
+        tlsFingerprintUsed: false,
+      };
+    }
+
     throw cbErr;
   }
 }
@@ -704,4 +771,21 @@ function safeLogEvents({
       comboName: comboName || null,
     });
   } catch {}
+}
+
+function withSessionHeader(response: Response, sessionId: string | null): Response {
+  if (!response || !sessionId) return response;
+
+  try {
+    response.headers.set("X-OmniRoute-Session-Id", sessionId);
+    return response;
+  } catch {
+    const cloned = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+    cloned.headers.set("X-OmniRoute-Session-Id", sessionId);
+    return cloned;
+  }
 }

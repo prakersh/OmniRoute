@@ -38,6 +38,10 @@ interface ApiKeyMetadata {
   autoResolve: boolean;
   isActive: boolean;
   accessSchedule: AccessSchedule | null;
+  maxRequestsPerDay: number | null;
+  maxRequestsPerMinute: number | null;
+  // T08: Per-key max concurrent sticky sessions (0 = unlimited)
+  maxSessions: number;
 }
 
 interface ApiKeyRow extends JsonRecord {
@@ -187,6 +191,19 @@ function ensureApiKeysColumns(db: ApiKeysDbLike) {
       db.exec("ALTER TABLE api_keys ADD COLUMN access_schedule TEXT");
       console.log("[DB] Added api_keys.access_schedule column");
     }
+    if (!columnNames.has("max_requests_per_day")) {
+      db.exec("ALTER TABLE api_keys ADD COLUMN max_requests_per_day INTEGER");
+      console.log("[DB] Added api_keys.max_requests_per_day column");
+    }
+    if (!columnNames.has("max_requests_per_minute")) {
+      db.exec("ALTER TABLE api_keys ADD COLUMN max_requests_per_minute INTEGER");
+      console.log("[DB] Added api_keys.max_requests_per_minute column");
+    }
+    // T08: max concurrent sticky sessions per key (0 = unlimited)
+    if (!columnNames.has("max_sessions")) {
+      db.exec("ALTER TABLE api_keys ADD COLUMN max_sessions INTEGER NOT NULL DEFAULT 0");
+      console.log("[DB] Added api_keys.max_sessions column");
+    }
     _schemaChecked = true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -212,7 +229,7 @@ function getPreparedStatements(db: ApiKeysDbLike): ApiKeysStatements {
     _stmtGetKeyById = db.prepare<ApiKeyRow>("SELECT * FROM api_keys WHERE id = ?");
     _stmtValidateKey = db.prepare<JsonRecord>("SELECT 1 FROM api_keys WHERE key = ?");
     _stmtGetKeyMetadata = db.prepare<ApiKeyRow>(
-      "SELECT id, name, machine_id, allowed_models, allowed_connections, no_log, auto_resolve, is_active, access_schedule FROM api_keys WHERE key = ?"
+      "SELECT id, name, machine_id, allowed_models, allowed_connections, no_log, auto_resolve, is_active, access_schedule, max_requests_per_day, max_requests_per_minute, max_sessions FROM api_keys WHERE key = ?"
     );
     _stmtInsertKey = db.prepare(
       "INSERT INTO api_keys (id, name, key, machine_id, allowed_models, no_log, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -406,6 +423,10 @@ export async function updateApiKeyPermissions(
         autoResolve?: boolean;
         isActive?: boolean;
         accessSchedule?: AccessSchedule | null;
+        maxRequestsPerDay?: number | null;
+        maxRequestsPerMinute?: number | null;
+        // T08: max concurrent sessions for this key (0 = unlimited)
+        maxSessions?: number | null;
       }
 ) {
   const db = getDbInstance() as ApiKeysDbLike;
@@ -422,6 +443,9 @@ export async function updateApiKeyPermissions(
           autoResolve: update.autoResolve,
           isActive: update.isActive,
           accessSchedule: update.accessSchedule,
+          maxRequestsPerDay: update.maxRequestsPerDay,
+          maxRequestsPerMinute: update.maxRequestsPerMinute,
+          maxSessions: (update as { maxSessions?: number | null }).maxSessions,
         };
 
   if (
@@ -431,7 +455,10 @@ export async function updateApiKeyPermissions(
     normalized.noLog === undefined &&
     normalized.autoResolve === undefined &&
     normalized.isActive === undefined &&
-    normalized.accessSchedule === undefined
+    normalized.accessSchedule === undefined &&
+    normalized.maxRequestsPerDay === undefined &&
+    normalized.maxRequestsPerMinute === undefined &&
+    (normalized as Record<string, unknown>).maxSessions === undefined
   ) {
     return false;
   }
@@ -446,6 +473,9 @@ export async function updateApiKeyPermissions(
     autoResolve?: number;
     isActive?: number;
     accessSchedule?: string | null;
+    maxRequestsPerDay?: number | null;
+    maxRequestsPerMinute?: number | null;
+    maxSessions?: number;
   } = { id };
 
   if (normalized.name !== undefined) {
@@ -484,6 +514,22 @@ export async function updateApiKeyPermissions(
     updates.push("access_schedule = @accessSchedule");
     params.accessSchedule =
       normalized.accessSchedule !== null ? JSON.stringify(normalized.accessSchedule) : null;
+  }
+
+  if (normalized.maxRequestsPerDay !== undefined) {
+    updates.push("max_requests_per_day = @maxRequestsPerDay");
+    params.maxRequestsPerDay = normalized.maxRequestsPerDay;
+  }
+
+  if (normalized.maxRequestsPerMinute !== undefined) {
+    updates.push("max_requests_per_minute = @maxRequestsPerMinute");
+    params.maxRequestsPerMinute = normalized.maxRequestsPerMinute;
+  }
+
+  const maxSessionsUpdate = (normalized as Record<string, unknown>).maxSessions;
+  if (maxSessionsUpdate !== undefined) {
+    updates.push("max_sessions = @maxSessions");
+    params.maxSessions = typeof maxSessionsUpdate === "number" ? Math.max(0, maxSessionsUpdate) : 0;
   }
 
   const result = db.prepare(`UPDATE api_keys SET ${updates.join(", ")} WHERE id = @id`).run(params);
@@ -574,6 +620,11 @@ export async function getApiKeyMetadata(
   const machineIdRaw = record.machine_id ?? record.machineId;
   const metadataMachineId = typeof machineIdRaw === "string" ? machineIdRaw : null;
 
+  const rawMaxRPD = record.max_requests_per_day ?? record.maxRequestsPerDay;
+  const rawMaxRPM = record.max_requests_per_minute ?? record.maxRequestsPerMinute;
+
+  const rawMaxSessions = record.max_sessions ?? record.maxSessions;
+
   const metadata: ApiKeyMetadata = {
     id: metadataId,
     name: metadataName,
@@ -586,6 +637,10 @@ export async function getApiKeyMetadata(
     autoResolve: parseAutoResolve(record.auto_resolve ?? record.autoResolve),
     isActive: parseIsActive(record.is_active ?? record.isActive),
     accessSchedule: parseAccessSchedule(record.access_schedule ?? record.accessSchedule),
+    maxRequestsPerDay: typeof rawMaxRPD === "number" && rawMaxRPD > 0 ? rawMaxRPD : null,
+    maxRequestsPerMinute: typeof rawMaxRPM === "number" && rawMaxRPM > 0 ? rawMaxRPM : null,
+    // T08: max concurrent sessions; 0 = unlimited (default & backward-compatible)
+    maxSessions: typeof rawMaxSessions === "number" && rawMaxSessions > 0 ? rawMaxSessions : 0,
   };
 
   if (!metadata.id) {

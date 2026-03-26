@@ -34,6 +34,7 @@ const DEFAULT_MODEL_P95_MS = {
   "claude-opus-4.6": 6000,
   "deepseek-chat": 2000,
 };
+const MIN_HISTORY_SAMPLES = 10;
 
 // In-memory atomic counter per combo for round-robin distribution
 // Resets on server restart (by design — no stale state)
@@ -320,12 +321,28 @@ function getBootstrapLatencyMs(modelId) {
 async function buildAutoCandidates(modelStrings, comboName) {
   const metrics = getComboMetrics(comboName);
   const { getPricingForModel } = await import("../../src/lib/localDb");
+  let historicalLatencyStats = {};
+  try {
+    const { getModelLatencyStats } = await import("../../src/lib/usageDb");
+    historicalLatencyStats = await getModelLatencyStats({
+      windowHours: 24,
+      minSamples: 3,
+      maxRows: 10000,
+    });
+  } catch {
+    // keep empty stats — auto-combo will use runtime + bootstrap signals
+  }
 
   const candidates = await Promise.all(
     modelStrings.map(async (modelStr) => {
       const parsed = parseModel(modelStr);
       const provider = parsed.provider || parsed.providerAlias || "unknown";
       const model = parsed.model || modelStr;
+      const historicalKey = `${provider}/${model}`;
+      const historicalModelMetric = historicalLatencyStats[historicalKey] || null;
+      const historicalTotal = Number(historicalModelMetric?.totalRequests);
+      const hasHistoricalSignal =
+        Number.isFinite(historicalTotal) && historicalTotal >= MIN_HISTORY_SAMPLES;
 
       let costPer1MTokens = 1;
       try {
@@ -341,12 +358,31 @@ async function buildAutoCandidates(modelStrings, comboName) {
       const modelMetric = metrics?.byModel?.[modelStr] || null;
       const avgLatency = Number(modelMetric?.avgLatencyMs);
       const successRate = Number(modelMetric?.successRate);
-      const p95LatencyMs =
-        Number.isFinite(avgLatency) && avgLatency > 0 ? avgLatency : getBootstrapLatencyMs(model);
-      const errorRate =
-        Number.isFinite(successRate) && successRate >= 0 && successRate <= 100
+      const historicalP95Latency = Number(historicalModelMetric?.p95LatencyMs);
+      const historicalStdDev = Number(historicalModelMetric?.latencyStdDev);
+      const historicalSuccessRate = Number(historicalModelMetric?.successRate); // 0..1
+
+      const p95LatencyMs = hasHistoricalSignal
+        ? Number.isFinite(historicalP95Latency) && historicalP95Latency > 0
+          ? historicalP95Latency
+          : getBootstrapLatencyMs(model)
+        : Number.isFinite(avgLatency) && avgLatency > 0
+          ? avgLatency
+          : getBootstrapLatencyMs(model);
+
+      const errorRate = hasHistoricalSignal
+        ? Number.isFinite(historicalSuccessRate) &&
+          historicalSuccessRate >= 0 &&
+          historicalSuccessRate <= 1
+          ? 1 - historicalSuccessRate
+          : 0.05
+        : Number.isFinite(successRate) && successRate >= 0 && successRate <= 100
           ? 1 - successRate / 100
           : 0.05;
+      const latencyStdDev =
+        hasHistoricalSignal && Number.isFinite(historicalStdDev) && historicalStdDev > 0
+          ? Math.max(10, historicalStdDev)
+          : Math.max(10, p95LatencyMs * 0.1);
 
       const breakerStateRaw = getCircuitBreaker(`combo:${modelStr}`)?.getStatus?.()?.state;
       const circuitBreakerState =
@@ -360,7 +396,7 @@ async function buildAutoCandidates(modelStrings, comboName) {
         circuitBreakerState,
         costPer1MTokens,
         p95LatencyMs,
-        latencyStdDev: Math.max(10, p95LatencyMs * 0.1),
+        latencyStdDev,
         errorRate,
         accountTier: "standard",
         quotaResetIntervalSecs: 86400,
@@ -411,8 +447,10 @@ export async function handleComboChat({
   const handleSingleModelWrapped = combo.context_cache_protection
     ? async (b, modelStr) => {
         const res = await handleSingleModel(b, modelStr);
-        // Inject tag only on success and only for non-streaming non-binary responses
-        if (res.ok && !b.stream) {
+        if (!res.ok) return res;
+
+        // Non-streaming: inject tag into JSON response (existing logic)
+        if (!b.stream) {
           try {
             const json = await res.clone().json();
             const msgs = Array.isArray(json?.messages) ? json.messages : [];
@@ -424,10 +462,108 @@ export async function handleComboChat({
               });
             }
           } catch {
-            /* non-JSON or stream — skip tagging */
+            /* non-JSON — skip tagging */
           }
+          return res;
         }
-        return res;
+
+        // Streaming (Fix #490 + #511): prepend omniModel tag into the first
+        // non-empty content chunk so it arrives BEFORE finish_reason:stop.
+        // SDKs close the connection on finish_reason, so anything sent after
+        // that marker is silently dropped.
+        if (!res.body) return res;
+        const tagContent = `\\n<omniModel>${modelStr}</omniModel>\\n`;
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        let tagInjected = false;
+
+        const transform = new TransformStream({
+          transform(chunk, controller) {
+            if (tagInjected) {
+              // Already injected — passthrough
+              controller.enqueue(chunk);
+              return;
+            }
+
+            const text = decoder.decode(chunk, { stream: true });
+
+            // Look for the first SSE data line with non-empty content
+            // Pattern: "content":"<non-empty>" — we inject tag at the start
+            const contentMatch = text.match(/"content":"([^"]+)/);
+            if (contentMatch) {
+              // Inject tag at the beginning of the first content value
+              const injected = text.replace(
+                /"content":"([^"]+)/,
+                `"content":"${tagContent.replace(/"/g, '\\"')}$1`
+              );
+              tagInjected = true;
+              controller.enqueue(encoder.encode(injected));
+              return;
+            }
+
+            // No content yet — passthrough
+            controller.enqueue(chunk);
+          },
+          flush(controller) {
+            // If stream ends without ever finding content (edge case),
+            // inject tag as a standalone chunk before the stream closes
+            if (!tagInjected) {
+              const tagChunk = `data: ${JSON.stringify({
+                choices: [
+                  {
+                    delta: { content: tagContent },
+                    index: 0,
+                    finish_reason: null,
+                  },
+                ],
+              })}\n\n`;
+              controller.enqueue(encoder.encode(tagChunk));
+            }
+          },
+        });
+
+        // FIX #585: Sanitize outbound stream — strip <omniModel> tags from
+        // visible content so they don't leak to the user. The tag is still
+        // present in the full response for round-trip context pinning, but
+        // we clean it from each SSE chunk's content field before delivery.
+        //
+        // IMPORTANT: Use a SEPARATE TextDecoder from the transform stream above.
+        // The transform stream's decoder accumulates UTF-8 state; reusing it here
+        // would corrupt multi-byte characters split across chunk boundaries.
+        const sanitizeDecoder = new TextDecoder();
+        const sanitize = new TransformStream({
+          transform(chunk, controller) {
+            const text = sanitizeDecoder.decode(chunk, { stream: true });
+            if (text) {
+              if (text.includes("<omniModel>")) {
+                const cleaned = text.replace(/\n?<omniModel>[^<]+<\/omniModel>\n?/g, "");
+                if (cleaned) controller.enqueue(encoder.encode(cleaned));
+              } else {
+                controller.enqueue(encoder.encode(text));
+              }
+            }
+          },
+          flush(controller) {
+            const tail = sanitizeDecoder.decode();
+            if (tail) {
+              if (tail.includes("<omniModel>")) {
+                const cleaned = tail.replace(/\n?<omniModel>[^<]+<\/omniModel>\n?/g, "");
+                if (cleaned) controller.enqueue(encoder.encode(cleaned));
+              } else {
+                controller.enqueue(encoder.encode(tail));
+              }
+            }
+          },
+        });
+
+        const transformedStream = res.body.pipeThrough(transform).pipeThrough(sanitize);
+        // Add model info as response header for clients that support it
+        const headers = new Headers(res.headers);
+        headers.set("X-OmniRoute-Model", modelStr);
+        return new Response(transformedStream, {
+          status: res.status,
+          headers,
+        });
       }
     : handleSingleModel;
   // ─────────────────────────────────────────────────────────────────────────
@@ -742,7 +878,8 @@ export async function handleComboChat({
         errorText,
         0,
         null,
-        provider
+        provider,
+        result.headers
       );
 
       // Record failure in circuit breaker for transient errors
@@ -766,6 +903,12 @@ export async function handleComboChat({
       if (!lastStatus) lastStatus = result.status;
       if (i > 0) fallbackCount++;
       log.warn("COMBO", `Model ${modelStr} failed, trying next`, { status: result.status });
+
+      if ([502, 503, 504].includes(result.status) && cooldownMs > 0 && cooldownMs <= 5000) {
+        log.info("COMBO", `Waiting ${cooldownMs}ms before fallback to next model`);
+        await new Promise((r) => setTimeout(r, cooldownMs));
+      }
+
       break; // Move to next model
     }
   }
@@ -787,7 +930,20 @@ export async function handleComboChat({
     );
   }
 
-  const status = lastStatus || 406;
+  if (!lastStatus) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Service temporarily unavailable: all upstream accounts are inactive",
+          type: "service_unavailable",
+          code: "ALL_ACCOUNTS_INACTIVE",
+        },
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const status = lastStatus;
   const msg = lastError || "All combo models unavailable";
 
   if (earliestRetryAfter) {
@@ -842,7 +998,7 @@ async function handleRoundRobinCombo({
 
   const modelCount = orderedModels.length;
   if (modelCount === 0) {
-    return unavailableResponse(406, "Round-robin combo has no models");
+    return unavailableResponse(503, "Round-robin combo has no models");
   }
 
   // Get and increment atomic counter
@@ -978,7 +1134,8 @@ async function handleRoundRobinCombo({
           errorText,
           0,
           null,
-          provider
+          provider,
+          result.headers
         );
 
         // Transient errors → mark in semaphore AND record circuit breaker failure
@@ -1007,6 +1164,12 @@ async function handleRoundRobinCombo({
         if (!lastStatus) lastStatus = result.status;
         if (offset > 0) fallbackCount++;
         log.warn("COMBO-RR", `${modelStr} failed, trying next model`, { status: result.status });
+
+        if ([502, 503, 504].includes(result.status) && cooldownMs > 0 && cooldownMs <= 5000) {
+          log.info("COMBO-RR", `Waiting ${cooldownMs}ms before fallback to next model`);
+          await new Promise((r) => setTimeout(r, cooldownMs));
+        }
+
         break;
       }
     } finally {
@@ -1037,7 +1200,20 @@ async function handleRoundRobinCombo({
     );
   }
 
-  const status = lastStatus || 406;
+  if (!lastStatus) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Service temporarily unavailable: all upstream accounts are inactive",
+          type: "service_unavailable",
+          code: "ALL_ACCOUNTS_INACTIVE",
+        },
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const status = lastStatus;
   const msg = lastError || "All round-robin combo models unavailable";
 
   if (earliestRetryAfter) {
